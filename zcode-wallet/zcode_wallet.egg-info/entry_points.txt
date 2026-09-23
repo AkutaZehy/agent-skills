@@ -1,0 +1,2 @@
+[console_scripts]
+zcode-wallet = zwallet:main

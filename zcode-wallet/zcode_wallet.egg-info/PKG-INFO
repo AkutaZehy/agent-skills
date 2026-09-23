@@ -1,0 +1,145 @@
+Metadata-Version: 2.4
+Name: zcode-wallet
+Version: 0.1.0
+Summary: Read-only token/quota analytics for ZCode's local ledger (db.sqlite)
+License: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
+# zcode-wallet
+
+ZCode 本地 token/额度账本的只读分析工具。回答"我的额度都烧哪儿了"——按项目、按模型提供商、按调用类型、按时间，任意组合过滤，还能估算 compact 扔掉了多少上下文。
+
+单文件、零依赖（纯 Python 标准库）、零 hook、零后台进程。本项目由 GLM-5.3-Flash 构建。
+
+> **声明**：本项目为个人开发的第三方工具，与 ZCode 官方无任何隶属、合作或认可关系，亦不代表官方观点。文中提及的模型名称与定价信息归各模型厂商所有，价格数据来自公开页面整理，实际费用以官方账单为准。
+
+## 原理
+
+ZCode 桌面端本来就会把**每一次模型 API 调用**写入本地 SQLite（`~/.zcode/cli/db/db.sqlite` 的 `model_usage` 表），字段包括 input/output/reasoning/cache_read/cache_write 分项 token、provider、model、agent、mode、query_source（`main_turn` / `subagent` / `compact` / `session_title`）、耗时、错误信息等。本工具以只读方式查询这张表，所以：
+
+- 不需要 hook 或定时任务去"记"——ZCode 自己已经记了（这就是"每次会话都写一点"的那个增量日志）；
+- 查询永远是最新数据，没有同步问题；
+- 对账以每条请求的 usage 为准，天然不受 compact 引起的上下文长度跳变影响（见下文）。
+
+## 安装
+
+```bash
+# 直接用（无需安装）
+python zwallet.py summary
+
+# 或装成命令
+pip install -e .
+zcode-wallet summary
+```
+
+默认读取 `~/.zcode/cli/db/db.sqlite`，可用 `--db` 或环境变量 `ZCODE_DB` 指定其他路径。数据库被占用时自动降级为临时副本读取。
+
+## 用法
+
+### 总览 + 额度进度
+
+```bash
+python zwallet.py summary                    # 全量：总量、缓存命中、速度、错误
+python zwallet.py summary --quota 600000000  # 对照周额度（如 GLM 600M/周）看消化进度
+```
+
+### 六类查询
+
+```bash
+# 1. 按项目
+python zwallet.py by --group project
+
+# 2. 按模型提供商
+python zwallet.py by --group provider
+
+# 3. 按调用类型（main_turn / subagent / compact / session_title）
+python zwallet.py by --group kind
+
+# 4. 按时间（day / week / hour，时间维度默认按时间排序）
+python zwallet.py by --group day
+python zwallet.py by --group hour --since 7d
+
+# 5. 复合条件：维度 x 任意过滤自由组合
+python zwallet.py by --group model --since 7d --provider bigmodel
+python zwallet.py by --group day --group kind --project osumania --since 30d
+
+# 6. 会话与请求级下钻
+python zwallet.py sessions --limit 15        # 最近会话 + 标题 + 烧量
+python zwallet.py detail 01b4f4eb            # 单会话逐请求时间线（前缀匹配即可）
+```
+
+其他维度：`--group model / variant / agent / mode / task / status / session`，排序 `--order total|requests|output|fresh_in|cache_read`。
+
+### compact 分析（本工具的差异化功能）
+
+```bash
+python zwallet.py compactions
+```
+
+输出 ZCode 记录的每次压缩事件：压缩前上下文、压缩后上下文、被丢弃的量。"dropped" 部分 = 之后不再随每个 turn 重发（也就不再计费/耗额度）的上下文。
+
+### 机器可读
+
+任意命令加 `--json`（放子命令前后均可）。
+
+## 计费估算（峰谷感知）
+
+```bash
+python zwallet.py costs                     # 全范围计费估算
+python zwallet.py costs --since 2026-09-07  # 本周账单
+python zwallet.py costs --model deepseek    # 只看某一族模型
+```
+
+按提供商类型分别处理（映射在 `prices.json` 的 `providers`）：
+
+- **plan（编码计划）**：按"积分加权"折算额度百分比。峰谷规则来自计划方文档，如 BigModel Coding Plan：高峰（周一至五 14:00-18:00 UTC+8）按基础积分 100% 抵扣，非高峰按 50% 抵扣——`积分加权 = 峰时token + 0.5 × 谷时token`，再除以周配额得 %。
+- **included / free（赠送计划、free 模型）**：只输出消耗量，不估价。
+- **pay（按量 API）**：按价格档案估算金额，支持峰谷双档价（如 DeepSeek：UTC 周一至五 01-04、06-10 为峰时，峰时价 2 倍；时间按请求的 UTC 时刻判定）。
+
+### 价格档案（股价式历史）
+
+`prices.json` 记录每次查证的价格：`as_of`（查证日期）+ `source`（来源）+ 平价/峰价 + 备注。查询时按**使用日期**取"≤ 该日的最新一条"（点位取价），若使用日期早于所有记录则复用最早一条——所以老账本遇到后来涨价也不会算错，没查到新价就沿用旧价。
+
+```bash
+python zwallet.py price list                    # 全部价格档案
+python zwallet.py price list deepseek-flash     # 某模型的历史价格
+
+# 查到新价后追加一条（峰谷可选，--peak-hours 按 UTC+8 给，自动转 UTC）
+python zwallet.py price add GLM-5.3 --currency CNY --input 8 --cache-read 2 --output 28 \
+    --source https://docs.bigmodel.cn/cn/guide/start/pricing --note "刊例价"
+python zwallet.py price add deepseek-flash --currency CNY --input 1 --cache-read 0.02 --output 4 \
+    --peak-input 2 --peak-cache-read 0.04 --peak-output 8 --peak-hours "9-12,14-18" --peak-weekdays-only
+```
+
+同一模型在不同提供商处售价不同时，用 `--provider` 记成 `provider|model` 专属条目（优先于全局条目匹配）。估算值与实际账单可能有出入（转售价、促销、账户折扣），价格条目均附来源供核对。
+
+## 对账口径与 compact 一致性问题
+
+
+对账时常见"上下文长度对不上"，根源是想把多次请求的上下文重建成长度连续的曲线——而 compact 会让它突然掉下去。本工具不做重建：
+
+- **每条请求的 usage 就是账本事实**：当时发了多少 input（含 cache read）、产出多少 output，直接累加，compact 与否都不影响正确性；
+- compact 是 ZCode 自己以 `query_source='compact'` 显式记录的事件，不需要启发式猜测；
+- `detail` / `compactions` 里额外标记上下文断点，便于肉眼核对。
+
+口径说明：`total = input（含缓存命中）+ output`，与"按全量 token 计费/计额度"的口径一致；缓存命中单列，方便按各平台缓存价差换算成本。
+
+## 局限
+
+- 只覆盖本地 db 建库以来的数据（更早的历史不在表里）；
+- ZCode 更新可能变更 `model_usage` 表结构，届时需同步适配；
+- `cache_creation_input_tokens` 取决于 provider 是否上报，多数时候为 0；
+- 错误请求（如超限、429）token 为 0，计入请求数但计入 `errors` 列而非烧量。
+
+## 相关工具
+
+做之前调研过这些现成工具，它们各有侧重，但都不是"分析查询"形态，于是有了本项目：
+
+- [xhwxt/zcode-token-usage-statusbar](https://github.com/xhwxt/zcode-token-usage-statusbar) — 悬浮状态栏，实时显示当前窗口用量
+- [zzh07/zcode-token-usage](https://github.com/zzh07/zcode-token-usage) — ZCode 插件，每个任务底部显示 token 页脚
+- [xincheng213618/codex-token-monitor](https://github.com/xincheng213618/codex-token-monitor) — Windows 桌面监控器（Codex / Claude Code / ZCode）
+
+## License
+
+[MIT](LICENSE)
