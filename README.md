@@ -14,23 +14,31 @@
 
 ## 安装
 
+脚本方式（拷贝到对应 harness 的技能目录，并打印 AGENTS.md 模板块；只拷贝和打印，不改你的任何文件）：
+
 ```bash
 git clone https://github.com/AkutaZehy/agent-skills.git
 cd agent-skills
-
-# ZCode：按需拷贝
-cp -r skills/memory-hygiene ~/.zcode/skills/
-cp -r skills/ask-first ~/.zcode/skills/
-cp -r skills/zcode-wallet ~/.zcode/skills/
-
-# Claude Code 同理，目标换 ~/.claude/skills/
+./install.sh --zcode                     # 装到 ~/.zcode/skills/
+./install.sh --dsh                       # 装到 ~/.dsh/skills/
+./install.sh --claude                    # 装到 ~/.claude/skills/
+SKILLS="ask-first" ./install.sh --zcode  # 只装一个
 ```
 
-zcode-wallet 的 SKILL.md 依赖同名 CLI（单文件纯标准库），先看 [zcode-wallet/README.md](zcode-wallet/README.md) 装好 `zwallet` 再装技能。
+手动方式等价于对每个 harness 的技能目录 `cp -r skills/<name>`（ZCode=`~/.zcode/skills`、dsh=`~/.dsh/skills`、Claude Code=`~/.claude/skills`）。
 
-## 与用户级指令配合
+zcode-wallet 的 SKILL.md 依赖同名 CLI（单文件纯标准库），先看 [zcode-wallet/README.md](zcode-wallet/README.md) 装好 `zwallet` 再装技能。仓库版 SKILL.md 是路径无关的；若你的本地副本有意写死了 CLI 绝对路径，安装时用 `SKILLS` 跳过它，别让脚本覆盖。
 
-skill 靠语义匹配触发，有漏触发的可能；更稳的用法是在 AGENTS.md / CLAUDE.md 里直接引用规则正文，保证每次会话在场——各 skill 的 README 内附引用模板。
+## 加载模型（懒加载机制）
+
+skill 不是装上就常驻生效的，加载分四层：
+
+1. **description 常驻** — 每会话系统提示里只有一行 name + description，这是唯一的自动触发面，靠语义匹配；
+2. **正文懒加载** — SKILL.md 正文仅在模型判定相关（或 `/skill-name` 手动调用）时才进入上下文；
+3. **AGENTS.md 引用兜底** — 行为类规则需要每次会话无条件在场，把 [templates/](templates/) 里的引用块贴进用户级 AGENTS.md / CLAUDE.md 即可，整段随会话进缓存后近乎零成本；
+4. **工具型 skill 保持懒加载** — 查询/流程类（如 zcode-wallet）天然事件驱动，description 触发词就是启动条件，无需常驻。
+
+一句话：**行为规则进 AGENTS.md，操作手册留 skill 懒加载**。这套机制在 ZCode / dsh / Claude Code 等同源 harness 上行为一致：SKILL.md 格式同款，仅安装目录不同；AGENTS.md 引用块三家通用；memory 属于各 harness 本机私有态，不在本仓库范围内。
 
 ## License
 
