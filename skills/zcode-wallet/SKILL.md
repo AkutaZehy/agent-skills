@@ -1,0 +1,33 @@
+---
+name: zcode-wallet
+description: Query ZCode token/quota burn (by project, provider, call type, time; compaction waste; quota pace) via the local zcode-wallet CLI instead of reading db.sqlite or JSONL logs. Use when the user asks about token 消耗/额度/对账/钱包/花了多少/烧了多少/cache 命中.
+---
+
+查询 ZCode 本地 token 账本用 zcode-wallet CLI（只读 `~/.zcode/cli/db/db.sqlite` 的 model_usage 表）。以下命令以仓库根目录为基准；装在别的位置时把 `zwallet.py` 替换为实际路径：
+
+```bash
+python zwallet.py <command>
+```
+
+规则：
+
+- 禁止直接读 db.sqlite 或 rollout JSONL——行数多、WAL、烧上下文；一律走本 CLI，输出已足够紧凑。
+- 先 `summary` 总览，再按需下钻；解析结果时加 `--json`。
+
+常用配方：
+
+```bash
+python .../zwallet.py summary --quota 600000000   # 总量 + 周额度消化进度
+python .../zwallet.py by --group project          # 按项目
+python .../zwallet.py by --group provider         # 按提供商
+python .../zwallet.py by --group kind             # 按调用类型 main_turn/subagent/compact/session_title
+python .../zwallet.py by --group day --since 7d   # 按时间（week/hour 同理）
+python .../zwallet.py by --group model --since 7d # 复合过滤示例
+python .../zwallet.py sessions --limit 10         # 最近会话
+python .../zwallet.py detail <session前缀>        # 单会话逐请求时间线（含压缩断点标记）
+python .../zwallet.py compactions                 # 压缩事件 + 被丢弃上下文估算
+python .../zwallet.py costs --since <周一日期>     # 计费估算：plan=积分加权%（峰谷 aware），pay=金额，free/赠送=只出量
+python .../zwallet.py price list [模型]           # 价格历史档案（股价式，含来源与峰谷价）
+```
+
+价格条目过旧时用 `price add` 追加新查证价（先 websearch 官方定价页）。过滤参数可任意组合：`--provider --model --agent --kind --mode --task --project --session --status --errors-only --since --until`。

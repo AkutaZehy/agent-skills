@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zcode-wallet"
+version = "0.1.0"
+description = "Read-only token/quota analytics for ZCode's local ledger (db.sqlite)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+
+[project.scripts]
+zcode-wallet = "zwallet:main"
+
+[tool.setuptools]
+py-modules = ["zwallet"]

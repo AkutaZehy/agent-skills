@@ -1,0 +1,360 @@
+{
+  "version": 1,
+  "updated": "2026-09-12",
+  "note": "价格档案（股价式）：history 每条 = 某日(as_of)查证的价格+来源；查询时按使用日期取 <= 该日的最新一条，无更早记录则复用最早一条。价格均为 每1M tokens。峰谷时间用 UTC 小时区间表示，周一至周五判定也按 UTC。",
+  "fx": {
+    "USD_CNY": 7.2,
+    "note": "costs 表格显示统一折算成人民币（¥）；USD 计价的提供商按此汇率近似换算，--json 保留原生币种金额"
+  },
+  "providers": {
+    "builtin:bigmodel-coding-plan": {
+      "label": "BigModel Coding Plan",
+      "type": "plan",
+      "quota": {
+        "weekly": 600000000
+      },
+      "peak": {
+        "hours_utc": [
+          [
+            6,
+            10
+          ]
+        ],
+        "weekdays_only": true,
+        "offpeak_factor": 0.5,
+        "source": "https://docs.bigmodel.cn/cn/coding-plan/overview 用量说明：高峰=周一至五 14:00-18:00 (UTC+8)=06-10 UTC，按基础积分 100% 抵扣；非高峰按 50% 抵扣"
+      }
+    },
+    "builtin:zai-start-plan": {
+      "label": "Z.ai Coding Plan (赠送)",
+      "type": "included"
+    },
+    "builtin:bigmodel": {
+      "label": "BigModel API Key",
+      "type": "pay",
+      "currency": "CNY"
+    },
+    "builtin:zai": {
+      "label": "Z.ai API Key",
+      "type": "pay",
+      "currency": "USD"
+    },
+    "251d0e57-b1ee-499a-a591-643ab06e67ed": {
+      "label": "DeepSeek 直连",
+      "type": "pay",
+      "currency": "CNY"
+    },
+    "ca35b720-c73d-47bb-99c2-e047bfe9d35b": {
+      "label": "DeepSeek (bili 代理)",
+      "type": "pay",
+      "currency": "CNY"
+    },
+    "c41dae0f-af70-430a-86bb-cf1c72aff65a": {
+      "label": "OpenAI via tu-zi (bili 代理)",
+      "type": "pay",
+      "currency": "USD"
+    },
+    "c32d5abd-659c-4f77-84e5-6a8dac2ce1b0": {
+      "label": "Opencode Zen (bili 代理)",
+      "type": "free"
+    },
+    "60d24877-72fd-4dc1-8478-7cf7a36a3bd2": {
+      "label": "Opencode Zen",
+      "type": "free"
+    },
+    "account:bigmodel-start-plan": {
+      "label": "BigModel Coding Plan",
+      "type": "plan",
+      "quota": {
+        "weekly": 600000000
+      },
+      "peak": {
+        "hours_utc": [
+          [
+            6,
+            10
+          ]
+        ],
+        "weekdays_only": true,
+        "offpeak_factor": 0.5,
+        "source": "https://docs.bigmodel.cn/cn/coding-plan/overview 用量说明：高峰=周一至五 14:00-18:00 (UTC+8)=06-10 UTC，按基础积分 100% 抵扣；非高峰按 50% 抵扣"
+      },
+      "note": "2026-09-20 加：ZCode 更新后 db 内 provider 名从 builtin: 换为 account: 前缀，配置沿用 bigmodel coding plan（同账号共享 quota，实测 nextResetTime 毫秒级一致）"
+    },
+    "account:bigmodel-individual-coding-plan": {
+      "label": "BigModel Coding Plan",
+      "type": "plan",
+      "quota": {
+        "weekly": 600000000
+      },
+      "peak": {
+        "hours_utc": [
+          [
+            6,
+            10
+          ]
+        ],
+        "weekdays_only": true,
+        "offpeak_factor": 0.5,
+        "source": "https://docs.bigmodel.cn/cn/coding-plan/overview 用量说明：高峰=周一至五 14:00-18:00 (UTC+8)=06-10 UTC，按基础积分 100% 抵扣；非高峰按 50% 抵扣"
+      },
+      "note": "2026-09-20 加：ZCode 更新后 db 内 provider 名从 builtin: 换为 account: 前缀，配置沿用 bigmodel coding plan（同账号共享 quota，实测 nextResetTime 毫秒级一致）"
+    }
+  },
+  "aliases": {
+    "deepseek-v4-flash": "deepseek-flash",
+    "deepseek-v4.1-flash-expires-on-0910": "deepseek-flash"
+  },
+  "history": {
+    "deepseek-flash": [
+      {
+        "as_of": "2026-08-13",
+        "source": "V4 Pro 正式版同步调价（观察者网 8-09 报道；新浪财经）",
+        "currency": "CNY",
+        "price": {
+          "input": 1.5,
+          "cache_read": 0.05,
+          "cache_write": 0,
+          "output": 4.5
+        },
+        "peak_price": null,
+        "note": "8-13 V4 上线大涨（价格水平=空闲价），峰谷计费此时尚未生效；deepseek-flash=V4.1-Flash，退役名 deepseek-v4-flash 同价"
+      },
+      {
+        "as_of": "2026-08-17",
+        "source": "新浪财经/至顶网：V4-Flash-0817 起峰谷计费生效",
+        "currency": "CNY",
+        "price": {
+          "input": 1.5,
+          "cache_read": 0.05,
+          "cache_write": 0,
+          "output": 4.5
+        },
+        "peak_price": {
+          "input": 3.0,
+          "cache_read": 0.1,
+          "cache_write": 0,
+          "output": 9.0
+        },
+        "peak_hours_utc": [
+          [
+            1,
+            4
+          ],
+          [
+            6,
+            10
+          ]
+        ],
+        "peak_weekdays_only": false,
+        "note": "8-17 起峰谷生效（北京峰时 9-12/14-18，峰=谷的2倍），此时一周七天都分峰谷"
+      },
+      {
+        "as_of": "2026-08-23",
+        "source": "21经济网：8-23 00:00 起优化峰谷计费规则",
+        "currency": "CNY",
+        "price": {
+          "input": 1.5,
+          "cache_read": 0.05,
+          "cache_write": 0,
+          "output": 4.5
+        },
+        "peak_price": {
+          "input": 3.0,
+          "cache_read": 0.1,
+          "cache_write": 0,
+          "output": 9.0
+        },
+        "peak_hours_utc": [
+          [
+            1,
+            4
+          ],
+          [
+            6,
+            10
+          ]
+        ],
+        "peak_weekdays_only": true,
+        "note": "周末（周六日）全天不再区分峰谷，变相降价"
+      },
+      {
+        "as_of": "2026-09-10",
+        "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
+        "currency": "CNY",
+        "price": {
+          "input": 1.0,
+          "cache_read": 0.02,
+          "cache_write": 0,
+          "output": 4.0
+        },
+        "peak_price": {
+          "input": 2.0,
+          "cache_read": 0.04,
+          "cache_write": 0,
+          "output": 8.0
+        },
+        "peak_hours_utc": [
+          [
+            1,
+            4
+          ],
+          [
+            6,
+            10
+          ]
+        ],
+        "peak_weekdays_only": true,
+        "note": "9-10 12:00 起 Flash 系列降价约六成（现价）；峰时=北京周一至五 9-12/14-18，空闲=半价"
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "as_of": "2026-08-13",
+        "source": "V4 Pro-0813 上线定价（较旧版最高涨 11 倍，观察者网/至顶网）",
+        "currency": "CNY",
+        "price": {
+          "input": 4.5,
+          "cache_read": 0.15,
+          "cache_write": 0,
+          "output": 13.5
+        },
+        "peak_price": null,
+        "note": "8-13 上线定价（水平=空闲价），峰谷计费尚未生效"
+      },
+      {
+        "as_of": "2026-08-17",
+        "source": "新浪财经：峰谷计费 8-17 生效",
+        "currency": "CNY",
+        "price": {
+          "input": 4.5,
+          "cache_read": 0.15,
+          "cache_write": 0,
+          "output": 13.5
+        },
+        "peak_price": {
+          "input": 9.0,
+          "cache_read": 0.3,
+          "cache_write": 0,
+          "output": 27.0
+        },
+        "peak_hours_utc": [
+          [
+            1,
+            4
+          ],
+          [
+            6,
+            10
+          ]
+        ],
+        "peak_weekdays_only": false,
+        "note": "8-17 起峰谷生效，全周分峰谷"
+      },
+      {
+        "as_of": "2026-08-23",
+        "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
+        "currency": "CNY",
+        "price": {
+          "input": 4.5,
+          "cache_read": 0.15,
+          "cache_write": 0,
+          "output": 13.5
+        },
+        "peak_price": {
+          "input": 9.0,
+          "cache_read": 0.3,
+          "cache_write": 0,
+          "output": 27.0
+        },
+        "peak_hours_utc": [
+          [
+            1,
+            4
+          ],
+          [
+            6,
+            10
+          ]
+        ],
+        "peak_weekdays_only": true,
+        "note": "价格至今未变（9-10 降价仅限 Flash 系列）；官方公告 9-14 后继续提供、计费不变；峰时=北京周一至五 9-12/14-18，周末全天空闲价"
+      }
+    ],
+    "GLM-5.3": [
+      {
+        "as_of": "2026-09-12",
+        "source": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+        "currency": "CNY",
+        "price": {
+          "input": 8.0,
+          "cache_read": 2.0,
+          "cache_write": 0,
+          "output": 28.0
+        },
+        "peak_price": null,
+        "note": "API 刊例平价（峰谷仅作用于 Coding Plan 积分抵扣）；缓存存储限时免费"
+      }
+    ],
+    "GLM-5.3-Flash": [
+      {
+        "as_of": "2026-09-12",
+        "source": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+        "currency": "CNY",
+        "price": {
+          "input": 0.8,
+          "cache_read": 0.23,
+          "cache_write": 0,
+          "output": 2.8
+        },
+        "peak_price": null,
+        "note": "bigmodel 刊例价；此前 5 折促销（0.4/1.4）已于 2026-09-09 结束"
+      }
+    ],
+    "builtin:zai|GLM-5.3-Flash": [
+      {
+        "as_of": "2026-09-12",
+        "source": "https://docs.z.ai/guides/overview/pricing",
+        "currency": "USD",
+        "price": {
+          "input": 0.15,
+          "cache_read": 0.03,
+          "cache_write": 0,
+          "output": 0.5
+        },
+        "peak_price": null,
+        "note": "z.ai API 按量价；缓存存储限时免费"
+      }
+    ],
+    "builtin:zai|GLM-5.3": [
+      {
+        "as_of": "2026-09-12",
+        "source": "https://docs.z.ai/guides/overview/pricing",
+        "currency": "USD",
+        "price": {
+          "input": 1.4,
+          "cache_read": 0.26,
+          "cache_write": 0,
+          "output": 4.4
+        },
+        "peak_price": null,
+        "note": "z.ai API 按量价"
+      }
+    ],
+    "gpt-5.6-luna": [
+      {
+        "as_of": "2026-08-19",
+        "source": "tu-zi 转售定价（websearch 2026-08-19）",
+        "currency": "USD",
+        "price": {
+          "input": 0.2,
+          "cache_read": 0.02,
+          "cache_write": 0,
+          "output": 1.2
+        },
+        "peak_price": null,
+        "note": "bili/tu-zi 代理转售价；如需最新价请重新查证后 price add 追加"
+      }
+    ]
+  }
+}
