@@ -11,6 +11,7 @@
 | [memory-hygiene](skills/memory-hygiene/) | 给 agent 的记忆文件卫生规范：记终态别记流水账，说做什么别说别做什么 | [README](skills/memory-hygiene/README.md) |
 | [ask-first](skills/ask-first/) | 反问协议：不确定先问、翻转计数器、超时挂起断点（English/中文双语） | [README](skills/ask-first/README.md) |
 | [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | [README](zcode-wallet/README.md) |
+| [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | [README](skills/strategic-coding/README.md) |
 
 ## 安装
 

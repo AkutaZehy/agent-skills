@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SKILLS="${SKILLS:-memory-hygiene ask-first zcode-wallet}"
+SKILLS="${SKILLS:-memory-hygiene ask-first zcode-wallet strategic-coding}"
 targets=()
 
 if [ $# -eq 0 ]; then
