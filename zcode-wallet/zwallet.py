@@ -633,7 +633,7 @@ def main(argv=None):
     add_filters(sp)
     sp.set_defaults(func="projects")
 
-    sp = sub.add_parser("costs", help="billing estimate: plan -> quota %, pay -> money (peak/off-peak aware)")
+    sp = sub.add_parser("costs", help="billing estimate: plan -> quota %%, pay -> money (peak/off-peak aware)")
     add_filters(sp)
     sp.set_defaults(func="costs")
 

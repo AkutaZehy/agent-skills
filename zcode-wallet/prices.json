@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-09-12",
+  "updated": "2026-09-24",
   "note": "价格档案（股价式）：history 每条 = 某日(as_of)查证的价格+来源；查询时按使用日期取 <= 该日的最新一条，无更早记录则复用最早一条。价格均为 每1M tokens。峰谷时间用 UTC 小时区间表示，周一至周五判定也按 UTC。",
   "fx": {
     "USD_CNY": 7.2,
@@ -39,6 +39,24 @@
       "type": "pay",
       "currency": "USD"
     },
+    "builtin:bigmodel-start-plan": {
+      "label": "BigModel Coding Plan (赠送期)",
+      "type": "plan",
+      "quota": {
+        "weekly": 600000000
+      },
+      "peak": {
+        "hours_utc": [
+          [
+            6,
+            10
+          ]
+        ],
+        "weekdays_only": true,
+        "offpeak_factor": 0.5
+      },
+      "note": "2026-09-24 加：赠送计划期（9/7 已止）的 builtin: 前缀名，与 account:bigmodel-start-plan 同产品；此前漏配导致 109M 历史用量显示未知提供商"
+    },
     "251d0e57-b1ee-499a-a591-643ab06e67ed": {
       "label": "DeepSeek 直连",
       "type": "pay",
@@ -61,6 +79,11 @@
     "60d24877-72fd-4dc1-8478-7cf7a36a3bd2": {
       "label": "Opencode Zen",
       "type": "free"
+    },
+    "xiaomi-mimo": {
+      "label": "MiMo (小米)",
+      "type": "pay",
+      "currency": "CNY"
     },
     "account:bigmodel-start-plan": {
       "label": "BigModel Coding Plan",
@@ -354,6 +377,36 @@
         },
         "peak_price": null,
         "note": "bili/tu-zi 代理转售价；如需最新价请重新查证后 price add 追加"
+      }
+    ],
+    "mimo-v2.6-flash": [
+      {
+        "as_of": "2026-09-24",
+        "source": "https://mimo.mi.com （websearch 2026-09-24，V2.6 沿用 V2.5 定价）",
+        "currency": "CNY",
+        "price": {
+          "input": 1.0,
+          "cache_read": 0.02,
+          "cache_write": 0,
+          "output": 2.0
+        },
+        "peak_price": null,
+        "note": "实时价；缓存命中 0.02 来自搜索摘要（99% 折扣），待官网复核。Batch API=实时价 5 折（ZCode 走实时接口，不适用）"
+      }
+    ],
+    "mimo-v2.6-pro": [
+      {
+        "as_of": "2026-09-24",
+        "source": "https://mimo.mi.com （websearch 2026-09-24，官网摘要证实）",
+        "currency": "CNY",
+        "price": {
+          "input": 3.0,
+          "cache_read": 0.025,
+          "cache_write": 0,
+          "output": 6.0
+        },
+        "peak_price": null,
+        "note": "实时价；Batch API=实时价 5 折（ZCode 走实时接口，不适用）"
       }
     ]
   }
