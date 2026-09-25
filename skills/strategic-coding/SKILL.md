@@ -55,8 +55,9 @@ Names, public interface signatures, and key why-comments are the contract face: 
 
 ### Maintaining: signal-driven payback
 1. A signal opens the work; the hot spot chooses where.
-2. Order of operations: coverage → move → comment pass → doc sync.
-3. Done when: the opening signal is gone, tests are green, and docs are synchronized — comments touched by the move updated, glossary terms renamed code-wide, README and design docs aligned. Doc sync is part of the definition of done, not a follow-up.
+2. Baseline before, diff after: snapshot the test count, key metrics, and file list at task start and diff at close — drift that no single step reveals is still drift.
+3. Order of operations: coverage → move → comment pass → doc sync.
+4. Done when: the opening signal is gone, tests are green, and docs are synchronized — comments touched by the move updated, glossary terms renamed code-wide, README and design docs aligned. Doc sync is part of the definition of done, not a follow-up.
 
 ## Companion skills (referenced when installed)
 - **test-hygiene** — refactoring's safety net: coverage rules, tautology cleanup, mutation testing.
