@@ -1,6 +1,6 @@
 # agent-skills
 
-给编码 agent（ZCode / Claude Code 等 SKILL.md 类 harness）的技能合集。每个 skill 一个目录，`skills/<name>/SKILL.md` 统一结构；本 README 是索引和安装总入口。
+给编码 agent（ZCode / Claude Code 等 SKILL.md 类 harness）的技能合集。每个 skill 一个目录，`skills/<name>/SKILL.md` 统一结构；本 README 是索引和安装总入口。仓库分四层：`skills/`（技能）、`templates/`（AGENTS.md 引用块）、`hooks/`（可选的结构闸门脚本）、`tools/`（配套工具代码）。
 
 本项目由 GLM-5.3-Flash 构建。由原独立仓库 memory-hygiene / ask-first / zcode-wallet 合并而来。
 
@@ -9,8 +9,8 @@
 | Skill | 一句话 | 详细说明 |
 |---|---|---|
 | [memory-hygiene](skills/memory-hygiene/) | 给 agent 的记忆文件卫生规范：记终态别记流水账，说做什么别说别做什么 | [README](skills/memory-hygiene/README.md) |
-| [ask-first](skills/ask-first/) | 反问协议：不确定先问、翻转计数器、超时挂起断点（English/中文双语） | [README](skills/ask-first/README.md) |
-| [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | [README](zcode-wallet/README.md) |
+| [ask-first](skills/ask-first/) | 反问协议 v2：开工三件套（类型/Done when/反问批次）、读→改漂移闸门、超时挂起断点（English/中文双语） | [README](skills/ask-first/README.md) |
+| [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | [README](tools/zcode-wallet/README.md) |
 | [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | [README](skills/strategic-coding/README.md) |
 
 ## 安装
@@ -24,11 +24,14 @@ cd agent-skills
 ./install.sh --dsh                       # 装到 ~/.dsh/skills/
 ./install.sh --claude                    # 装到 ~/.claude/skills/
 SKILLS="ask-first" ./install.sh --zcode  # 只装一个
+./install.sh --zcode --hooks             # 额外安装 ask-first 闸门（见下）
 ```
 
 手动方式等价于对每个 harness 的技能目录 `cp -r skills/<name>`（ZCode=`~/.zcode/skills`、dsh=`~/.dsh/skills`、Claude Code=`~/.claude/skills`）。
 
-zcode-wallet 的 SKILL.md 依赖同名 CLI（单文件纯标准库），先看 [zcode-wallet/README.md](zcode-wallet/README.md) 装好 `zwallet` 再装技能。仓库版 SKILL.md 是路径无关的；若你的本地副本有意写死了 CLI 绝对路径，安装时用 `SKILLS` 跳过它，别让脚本覆盖。
+**hooks（可选，仅 ZCode）**：`--hooks` 把 `hooks/askfirst-gate.js` 装到 `~/.zcode/hooks/` 并合并进 `~/.zcode/cli/config.json` 的 hooks 配置，在开工、第一次落笔、收尾三个时刻注入提醒（开工三件套 / 读→改漂移 / 翻转超限对账）。这是安装器唯一会改你文件的步骤：自动备份 config.json、幂等可重跑、回滚=把打印出的备份文件复制回去。不带 `--hooks` 时一切照旧，只拷贝和打印。
+
+zcode-wallet 的 SKILL.md 依赖同名 CLI（单文件纯标准库，源码在 [tools/zcode-wallet/](tools/zcode-wallet/)），先看 [tools/zcode-wallet/README.md](tools/zcode-wallet/README.md) 装好 `zwallet` 再装技能。仓库版 SKILL.md 是路径无关的；若你的本地副本有意写死了 CLI 绝对路径，安装时用 `SKILLS` 跳过它，别让脚本覆盖。
 
 ## 加载模型（懒加载机制）
 
