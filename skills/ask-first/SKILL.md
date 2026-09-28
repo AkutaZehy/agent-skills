@@ -1,40 +1,33 @@
 ---
 name: ask-first
-description: Ask the user instead of storm-searching when uncertain — flip counter with a visible tally, batched AskUserQuestion, suspend-with-breakpoint on timeout. Use when a term, file location, or A/B plan choice is ambiguous, when approaches keep flipping, or when a fork cannot be converged with evidence. 触发词：反问、先问、不确定就问、超时挂起。
+description: Ask at task start and at unverifiable forks instead of guessing - opening trio (task type, done-when, one batched AskUserQuestion), read-to-write drift gate, suspend-with-breakpoint on timeout. Use when starting a coding or debugging task, when a term, file location, or A/B fork is ambiguous, or when approaches keep flipping. 触发词：反问、先问、开工三件套、不确定就问、超时挂起。
 ---
 
 # Ask First
 
-A deliberation that keeps flipping is search with no exit. The cheap exit is a question. This skill turns "third flip / unverifiable fork" into one blocking AskUserQuestion, and turns a timed-out question into a suspended breakpoint — never into a guess. Rules are given in English and in 中文; apply the version matching your current thinking language.
+Asking is the cheapest exit from an ambiguous task. This skill turns a task start into a three-item opening gate (type / done-when / one batched question), turns a read task that starts writing into a re-gated task, and turns a timed-out question into a suspended breakpoint — never into a guess. Rules are given in English and in 中文; apply the version matching your current output language.
 
-## 1. When to stop and ask
+## 1. The opening trio (every substantive task message)
 
-- **Third flip.** On one question, once the dominant explanation has changed hands twice (two full teardowns), stop retrying and ask. The counting unit is a change of the dominant explanation — the marker words below are hints, not the counter. Euphemized flips ("just a minor re-ranking") still count.
-- **Colon proposals.** "Better: / Cleaner: / Simpler: / Safer:" is a high-risk switch signal (adopted ~85% of the time in practice). After proposing, either justify immediately or keep the current plan; two such switches on one question reach the ask line. "What if / how about" are self-check questions — handle them as verification, not counted as switches.
-- **Unverifiable forks.** Puzzle answers, the user's mental standard, pure preference — no evidence channel converges these. Ask immediately; convert a guess list into AskUserQuestion options.
+1. **Type** — read / modify / read+modify / research, with the object named.
+2. **Done when** — the acceptance criterion: what phenomenon appears, which test goes green, which bug no longer reproduces.
+3. **Question batch** — one AskUserQuestion (≤4 items). Questions come from two sources only: confirming the done-when reading, and real forks (plan A/B, scope, terminology). Anything a grep can answer, resolve by grep first.
 
-Batch every open fork into ONE AskUserQuestion call (what X means / where X lives / plan A or B), then wait for the answer.
+The trio is forced for coding/modification and environment/debugging tasks; for research, read-only, and pure conversation, declare type and done-when and skip the batch. It goes at the top of the deliverable so the user can correct it on sight.
 
-## 2. Counter discipline
+## 2. The drift gate
 
-- Keep a visible tally line in thinking: `flips:N colon:N` (翻转:N 冒号:N); increment in place at every flip.
-- Reset to zero on: new user message, answer sent, explicit switch to a subtask.
-- When your self-report disagrees with the semantic flips, the semantics win — models undercount their own flips.
+A task declared as read or research (including "think of options", "suggest improvements") becomes read+modify at the first Edit/Write. Before that first write, correct the type and send the question batch — or state plainly "no new forks" and proceed.
 
-## 3. Marker hints
+## 3. Ask at unverifiable forks
 
-- English thinking: wait, hmm, but wait, no wait, actually wait, hold on, let me reconsider, But honestly, Hmm but, Let me re-read / reconsider / think.
-- Chinese thinking (GLM family): 等等、不对、其实.
+Puzzle answers, the user's mental standard, pure preference — no evidence channel converges these; ask immediately and turn a guess list into question options. The same applies when the dominant explanation of one question has changed hands a third time, or when Better:/Cleaner:/Simpler:/Safer: proposals have switched the plan twice. Marker words (wait, hmm, but wait, hold on, let me reconsider; 等等、不对、其实) are hints for after-the-fact review, not a runtime counter — no in-flight tallying. "Go find it yourself" (自己去找) is the only opt-out.
 
 ## 4. Timeout = suspend, not improvise
 
 If the question returns unanswered (user away, harness timeout), terminate the deliberation on that question and pick no substitute assumption. Output a breakpoint: "I asked: X — waiting for your reply", noting which fork the thinking stopped at. Personal AI collaboration carries no factory-grade requirement to keep running; suspending beats guessing.
 
-## 5. Exception
-
-"Go find it yourself" (自己去找) is the only opt-out: switch to self-serve research and stop asking.
-
-## 6. Lean thinking (where flips come from)
+## 5. Lean thinking
 
 Candidate answer first, then brief verification (a few lines); keep the first workable approach; simple tasks run no verification loop. The urge to verify everything is RL-trained and cannot be deleted — treat it as a dial, not an on/off switch.
 
@@ -42,35 +35,28 @@ Candidate answer first, then brief verification (a few lines); keep the first wo
 
 # 中文版（Ask First）
 
-会一直翻案的思考就是没有出口的搜索，而最便宜的出口是提问。本 skill 把"第三次翻案 / 不可验证分叉"变成一次阻塞式 AskUserQuestion，把超时问题变成挂起断点——绝不变成瞎猜。以下规则与英文版等价，跟随当前思考语言选用。
+提问是含糊任务最便宜的出口。本 skill 把任务开工变成三件套（类型 / done-when / 一次合并提问），把"读着读着开始改"变成重新过闸的任务，把超时问题变成挂起断点——绝不变成瞎猜。规则中英等价，按当前输出语言选用。
 
-## 1. 何时停笔发问
+## 1. 开工三件套（每条实质性任务消息）
 
-- **第三次翻案。** 同一问题内主导解释已换手两次（整体推翻过两次）时，停止重试、发起提问。计数单位=主导解释换手，下文词表只是提示，不是计数本体；包装成"只是排名微调"的换手照计。
-- **冒号提议。** "Better:/Cleaner:/Simpler:/Safer:" 是高危换方案信号（实测约 85% 被采纳）：提议后要么当场论证、要么沿用现方案；同一问题内该型换手两次即达反问线。"what if / how about" 属自检疑问，按验证处理，不计换手。
-- **不可验证分叉。** 谜底、用户脑内标准、纯偏好——没有证据通道可以收敛，出现即问；把猜测清单转成 AskUserQuestion 的选项列表。
+1. **类型**——读 / 改 / 读并改 / 检索，写明对象。
+2. **Done when**——完成口径：什么现象出现、哪条测试绿、bug 不再复现。
+3. **反问批次**——一次 AskUserQuestion（≤4 题）。题目只来自两个源头：确认 done-when 的口径，与真实分叉（方案 A/B、范围、术语）；grep 能答的先自查。
 
-所有未决分叉合并进一次 AskUserQuestion（术语 X 什么含义 / X 在哪 / 选 A 还是 B），抛出后等待回答再继续。
+编码/修改与环境/排障类强制三件套；检索、只读、纯对话类声明类型与 done-when、省略批次。三件套写进交付说明开头，用户可当场纠正。
 
-## 2. 计数器纪律
+## 2. 漂移闸门
 
-- 思考里维护一行可见计数：`翻转:N 冒号:N`（flips:N colon:N），每次换手当场 +1。
-- 三归零：新用户消息、答案发出、显式切入子任务。
-- 自报数与语义换手不一致时以语义为准——模型会漏计自己的翻转。
+开工声明为读或检索的任务（含"想方案、提改进建议"类），在第一次 Edit/Write 时即变为"读并改"：落笔前更正类型并发反问批次，或明确声明"无新分叉"后继续。
 
-## 3. 标志词提示
+## 3. 不可验证分叉即问
 
-- 英文思考：wait、hmm、but wait、no wait、actually wait、hold on、let me reconsider、But honestly、Hmm but、Let me re-read/reconsider/think。
-- 中文思考（GLM 系）：等等、不对、其实。
+谜底、用户脑内标准、纯偏好——没有证据通道可以收敛，出现即问，把猜测清单转成选项列表。同一问题的主导解释换手到第三次、或 Better:/Cleaner:/Simpler:/Safer: 型提议两次改写方案时，同样发问。标志词（wait、hmm、but wait、hold on、let me reconsider；等等、不对、其实）只是事后复查的提示，不是在飞计数器——不要求边想边数。"自己去找"是唯一豁免。
 
 ## 4. 超时=挂起，不代答
 
-问题超时未获回答（用户离开 / harness 超时）时，终止该问题的后续思考，不自行取信代答；输出断点："我提出了问题 X，等待用户回复"，并注明思考断在哪个分叉。个人 AI 协作开发没有工厂级的持续运作要求，挂起优先于猜着继续。
+问题超时未获回答（用户离开 / harness 超时）时，终止该问题的后续思考，不自行取信代答；输出断点："我提出了问题 X，等待用户回复"，并注明思考断在哪个分叉。个人协作开发没有工厂级的持续运作要求，挂起优先于猜着继续。
 
-## 5. 唯一例外
-
-用户明确说"自己去找"时切换为自行查证，停止发问。
-
-## 6. 精益思考（翻案从哪来）
+## 5. 精益思考
 
 先给候选结论再短验证（几行内）；方案第一次可行就沿用；简单任务不跑验证循环。验证冲动是 RL 训练烙进去的，删不掉——当旋钮用，不当开关用。
