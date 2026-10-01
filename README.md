@@ -12,6 +12,7 @@
 | [ask-first](skills/ask-first/) | 反问协议 v2：开工三件套（类型/Done when/反问批次）、读→改漂移闸门、超时挂起断点（English/中文双语） | [README](skills/ask-first/README.md) |
 | [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | [README](tools/zcode-wallet/README.md) |
 | [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | [README](skills/strategic-coding/README.md) |
+| [negafix](skills/negafix/) | 负向平行结构禁令与审计（"it's not just X, it's Y"），上游 v1.2.1 + 本地中文检测段 | [SKILL](skills/negafix/SKILL.md) |
 
 ## 安装
 
@@ -28,6 +29,10 @@ SKILLS="ask-first" ./install.sh --zcode  # 只装一个
 ```
 
 手动方式等价于对每个 harness 的技能目录 `cp -r skills/<name>`（ZCode=`~/.zcode/skills`、dsh=`~/.dsh/skills`、Claude Code=`~/.claude/skills`）。
+
+negafix 不在默认 `SKILLS` 列表：它是第三方 skill（上游 Ihor Orlovskyi v1.2.1，MIT）加本地中文检测段的补丁版，需要时装 `SKILLS="negafix" ./install.sh --zcode`。上游出新版覆盖安装副本会丢中文段，以本仓库 `skills/negafix/` 为正本重拷。
+
+**templates**：安装结束会打印所选 skill 的 AGENTS.md 引用块；另有 [templates/output-style.md](templates/output-style.md)——输出风格三行的正本，跨 harness 通用，贴进各 harness 的输出风格节或等价位置。
 
 **hooks（可选，仅 ZCode）**：`--hooks` 把 `hooks/askfirst-gate.js` 装到 `~/.zcode/hooks/` 并合并进 `~/.zcode/cli/config.json` 的 hooks 配置，在开工、第一次落笔、收尾三个时刻注入提醒（开工三件套 / 读→改漂移 / 翻转超限对账）。这是安装器唯一会改你文件的步骤：自动备份 config.json、幂等可重跑、回滚=把打印出的备份文件复制回去。不带 `--hooks` 时一切照旧，只拷贝和打印。
 
