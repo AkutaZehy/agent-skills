@@ -1,6 +1,6 @@
 ---
 name: ask-first
-description: Ask at task start and at unverifiable forks instead of guessing - opening trio (task type, done-when, one batched AskUserQuestion), read-to-write drift gate, suspend-with-breakpoint on timeout. Use when starting a coding or debugging task, when a term, file location, or A/B fork is ambiguous, or when approaches keep flipping. 触发词：反问、先问、开工三件套、不确定就问、超时挂起。
+description: Ask at task start and at unverifiable forks instead of guessing - opening trio (task type, done-when, one batched AskUserQuestion), read-to-write drift gate, mutation/external Bash gates, suspend-with-breakpoint on timeout. Use when starting a coding or debugging task, when a term, file location, or A/B fork is ambiguous, or when approaches keep flipping. 触发词：反问、先问、开工三件套、不确定就问、超时挂起、变更门禁、外发门禁。
 ---
 
 # Ask First
@@ -31,6 +31,20 @@ If the question returns unanswered (user away, harness timeout), terminate the d
 
 Candidate answer first, then brief verification (a few lines); keep the first workable approach; simple tasks run no verification loop. The urge to verify everything is RL-trained and cannot be deleted — treat it as a dial, not an on/off switch.
 
+## 6. Mutation and external gates (hook-enforced)
+
+The `hooks/askfirst-gate.js` Bash gate enforces edit-operation discipline mechanically (see the edit-operation rule: look at the target before write/modify/delete/move). Behavior on a deny: inspect the target (ls/cat/git status) or get user confirmation, then re-run the same command — an exact re-run passes; that re-run is the "I looked" signal.
+
+| Class | Operations | Gate |
+|---|---|---|
+| External / irreversible | `git push`, `npm publish/unpublish`, `gh repo delete`, `gh release create/delete/upload`, `gh api -X DELETE/POST/PUT/PATCH` | block first; passes after user confirmation (AskUserQuestion or explicit instruction) and re-run |
+| Overwrite (add/move) | `cp`/`mv`/`install`/`git mv` onto an existing path, `> ` redirect onto an existing file, `tee`, `dd of=`, `curl -o`/`wget -O`, `rsync`, `tar -x`/`unzip -o` into a non-empty dir | block only when something exists to lose (hook checks target existence); non-existent targets pass silently |
+| Delete | `rm`/`unlink`/`shred`/`del`/`git rm` on existing paths | same existence check |
+| Git state overwrite | `git reset --hard`, `git checkout -- <path>`, `git restore`, `git stash drop/pop/clear`, `git clean`, `git branch -D`, `git tag -d` | block first (existence cannot be checked cheaply); re-run passes |
+| In-place modify | `sed -i`, `perl -pi`, `git commit --amend`, `git rebase`, `git filter-branch`, `git stash pop`, `patch`/`git apply` | remind once per kind per session: verify the pattern hits only what is intended, diff after |
+
+Parse failures (variables, exotic quoting, unconvertible paths) fail open — the gate never blocks on uncertainty, only on a positively detected loss.
+
 ---
 
 # 中文版（Ask First）
@@ -60,3 +74,17 @@ Candidate answer first, then brief verification (a few lines); keep the first wo
 ## 5. 精益思考
 
 先给候选结论再短验证（几行内）；方案第一次可行就沿用；简单任务不跑验证循环。验证冲动是 RL 训练烙进去的，删不掉——当旋钮用，不当开关用。
+
+## 6. 变更与外发门禁（hook 强制）
+
+`hooks/askfirst-gate.js` 的 Bash 门禁把编辑操作纪律机械化（写/改/删/挪先看目标）。被拦时的动作：先看目标（ls/cat/git status）或先经用户确认，然后**重跑同一命令即放行**——重跑就是"看过一眼"的信号。
+
+| 类别 | 操作 | 门禁 |
+|---|---|---|
+| 外发不可逆 | `git push`、`npm publish/unpublish`、`gh repo delete`、`gh release create/delete/upload`、`gh api -X DELETE/POST/PUT/PATCH` | 首拦；经用户确认（AskUserQuestion 或明示）后重跑放行 |
+| 覆盖（增/挪） | `cp`/`mv`/`install`/`git mv` 目标已存在、`>` 重定向截断已有文件、`tee`、`dd of=`、`curl -o`/`wget -O`、`rsync`、`tar -x`/`unzip -o` 解到非空目录 | 有东西可丢才拦（hook 自查目标存在性）；目标不存在静默放行 |
+| 删除 | `rm`/`unlink`/`shred`/`del`/`git rm` 目标已存在 | 同上存在性检查 |
+| git 状态覆盖 | `git reset --hard`、`git checkout -- <路径>`、`git restore`、`git stash drop/pop/clear`、`git clean`、`git branch -D`、`git tag -d` | 首拦（存在性没法便宜检查）；重跑放行 |
+| 就地修改 | `sed -i`、`perl -pi`、`git commit --amend`、`git rebase`、`git filter-branch`、`git stash pop`、`patch`/`git apply` | 每类每会话提醒一次：核对模式只命中预期内容，跑后 diff 自查 |
+
+解析失败（变量、特殊引号、转不了的路径）一律放行——门禁只在"确认会丢东西"时拦，不确定不拦。

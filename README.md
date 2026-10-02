@@ -35,7 +35,7 @@ negafix 不在默认 `SKILLS` 列表：它是第三方 skill（上游 Ihor Orlov
 
 **templates**：安装结束会打印所选 skill 的 AGENTS.md 引用块；另有 [templates/output-style.md](templates/output-style.md)——输出风格三行的正本，跨 harness 通用，贴进各 harness 的输出风格节或等价位置。
 
-**hooks（可选，仅 ZCode）**：`--hooks` 把 `hooks/askfirst-gate.js` 装到 `~/.zcode/hooks/` 并合并进 `~/.zcode/cli/config.json` 的 hooks 配置，在开工、第一次落笔、收尾三个时刻注入提醒（开工三件套 / 读→改漂移 / 翻转超限对账）。这是安装器唯一会改你文件的步骤：自动备份 config.json、幂等可重跑、回滚=把打印出的备份文件复制回去。不带 `--hooks` 时一切照旧，只拷贝和打印。
+**hooks（可选，仅 ZCode）**：`--hooks` 把 `hooks/askfirst-gate.js` 装到 `~/.zcode/hooks/` 并合并进 `~/.zcode/cli/config.json` 的 hooks 配置。两类作用：①开工、第一次落笔、收尾三个时刻注入提醒（开工三件套 / 读→改漂移 / 翻转超限对账）；②Bash 变更/外发门禁（v3）——外发不可逆（git push、npm publish/unpublish、gh repo|release 删发、gh api 写操作）首拦；覆盖/删除类 hook 自查目标存在性，有东西可丢才拦；git 状态覆盖类首拦；就地修改类提醒。被拦后重跑同一命令即放行。这是安装器唯一会改你文件的步骤：自动备份 config.json、幂等可重跑、回滚=把打印出的备份文件复制回去。不带 `--hooks` 时一切照旧，只拷贝和打印。
 
 zcode-wallet 的 SKILL.md 依赖同名 CLI（单文件纯标准库，源码在 [tools/zcode-wallet/](tools/zcode-wallet/)），先看 [tools/zcode-wallet/README.md](tools/zcode-wallet/README.md) 装好 `zwallet` 再装技能。仓库版 SKILL.md 是路径无关的；若你的本地副本有意写死了 CLI 绝对路径，安装时用 `SKILLS` 跳过它，别让脚本覆盖。
 
