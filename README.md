@@ -12,6 +12,7 @@
 | [ask-first](skills/ask-first/) | 反问协议 v2：开工三件套（类型/Done when/反问批次）、读→改漂移闸门、超时挂起断点（English/中文双语） | [README](skills/ask-first/README.md) |
 | [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | [README](tools/zcode-wallet/README.md) |
 | [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | [README](skills/strategic-coding/README.md) |
+| [publish-privacy-alert](skills/publish-privacy-alert/) | 对外发布前的隐私卫生审查：机器画像驱动扫描 + 四类核对 + 交付物终扫（数据与逻辑分离，画像仅存本机） | [SKILL](skills/publish-privacy-alert/SKILL.md) |
 | [negafix](skills/negafix/) | 负向平行结构禁令与审计（"it's not just X, it's Y"），上游 v1.2.1 + 本地中文检测段 | [SKILL](skills/negafix/SKILL.md) |
 
 ## 安装
