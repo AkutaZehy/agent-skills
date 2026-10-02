@@ -43,6 +43,7 @@ files="$tmp/files"; raw_lit="$tmp/raw_lit"; raw_reg="$tmp/raw_reg"; err="$tmp/er
 
 deny_count=0
 while IFS= read -r line || [ -n "$line" ]; do
+  line="${line%$'\r'}"   # tolerate CRLF-encoded profiles
   case "$line" in
     ''|'#'*) continue ;;
     're:'*)
@@ -114,11 +115,11 @@ while IFS= read -r f; do
   fi
   if [ -f "$f" ]; then
     if [ -s "$lit" ]; then
-      grep -nIF -f "$lit" "$f" >> "$raw_lit" 2>> "$err"
+      grep -nIF -f "$lit" "$f" 2>> "$err" | Pref="$f" awk '{ print ENVIRON["Pref"] ":" $0 }' >> "$raw_lit"
       g=$?; case $g in 0|1) ;; *) scan_err=1 ;; esac
     fi
     if [ -s "$reg" ]; then
-      grep -nIE -f "$reg" "$f" >> "$raw_reg" 2>> "$err"
+      grep -nIE -f "$reg" "$f" 2>> "$err" | Pref="$f" awk '{ print ENVIRON["Pref"] ":" $0 }' >> "$raw_reg"
       g=$?; case $g in 0|1) ;; *) scan_err=1 ;; esac
     fi
   fi
@@ -136,25 +137,25 @@ rc=0
 candidates=0
 if [ -s "$raw_lit" ]; then
   while IFS= read -r rawline; do
-    line_no=$(printf '%s' "$rawline" | sed -E 's/^([0-9]+):.*$/\1/')
+    loc=$(printf '%s' "$rawline" | sed -E 's/(:[0-9]+):.*$/\1/')
     if [ -s "$allow" ] && printf '%s' "$rawline" | grep -qF -f "$allow"; then
       candidates=$((candidates+1))
-      echo "[allow-candidate] $f:$line_no"
+      echo "[allow-candidate] $loc"
     else
       rc=1
-      echo "[hit:deny] $f:$line_no"
+      echo "[hit:deny] $loc"
     fi
   done < "$raw_lit"
 fi
 if [ -s "$raw_reg" ]; then
   while IFS= read -r rawline; do
-    line_no=$(printf '%s' "$rawline" | sed -E 's/^([0-9]+):.*$/\1/')
+    loc=$(printf '%s' "$rawline" | sed -E 's/(:[0-9]+):.*$/\1/')
     if [ -s "$allow" ] && printf '%s' "$rawline" | grep -qF -f "$allow"; then
       candidates=$((candidates+1))
-      echo "[allow-candidate] $f:$line_no"
+      echo "[allow-candidate] $loc"
     else
       rc=1
-      echo "[hit:deny:regex] $f:$line_no"
+      echo "[hit:deny:regex] $loc"
     fi
   done < "$raw_reg"
 fi

@@ -85,4 +85,15 @@ printf 'binary\x00blob with sk-ABCDEF1234567890ABCDEF inside' > "$tmp/bin.dat"
 bash "$SCAN" "$tmp/profile" "$tmp/bin.dat" > "$tmp/o3" 2>&1
 check "binary file skipped via -I exits CLEAN(0)" 0 "$?"
 
+# 10) CRLF-encoded profile tolerated (parser strips \r)
+printf 'C:\\Users\\alice\\notes.txt\r\nallow:C:\\demo\r\n' > "$tmp/crlf-profile"
+bash "$SCAN" "$tmp/crlf-profile" "$tmp/leak.md" > "$tmp/o4" 2>&1
+check "CRLF profile exits HIT(1)" 1 "$?"
+grep -q "leak.md:" "$tmp/o4" && echo "pass: file attribution present" || { echo "FAIL: no file attribution"; fail=1; }
+
+# 11) multi-target scan keeps per-file attribution
+bash "$SCAN" "$tmp/profile" "$tmp/leak.md" "$tmp/clean.md" > "$tmp/o5" 2>&1
+check "multi-target exits HIT(1)" 1 "$?"
+grep -q "leak.md:" "$tmp/o5" && echo "pass: attribution kept in multi-target" || { echo "FAIL: attribution lost"; fail=1; }
+
 exit $fail

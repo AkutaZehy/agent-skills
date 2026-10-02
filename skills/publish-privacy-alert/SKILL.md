@@ -47,6 +47,10 @@ description: 对外发布（push、PR、release、发包、公开站点）前的
 
 相对路径；模拟路径（`C:\demo`、`C:\path\to\your`、`/tmp/example`）；尖括号占位符（`<name>`、`<your-key>`）；文档保留域名（example.com）；合成测试向量。命中白名单 = 放行并记录，不阻塞发布。
 
+## 依赖
+
+bash（3.2+）、`find`、`grep`（`-n -I -F -E -f`）、`sed -E`、`mktemp`。Windows 需 Git Bash 或 WSL。扫描器自持输出格式（find 枚举 + 逐文件 grep），GNU grep / BSD grep / ugrep 均可；画像文件兼容 LF 与 CRLF。
+
 ## 自我应用与回归
 
 - 本仓库自身接入扫描：公开文本（README、各 SKILL.md）发布前用本 skill 扫自己。
