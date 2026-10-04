@@ -6,14 +6,17 @@
 
 ## Skills 一览
 
-| Skill | 一句话 | 详细说明 |
-|---|---|---|
-| [memory-hygiene](skills/memory-hygiene/) | 给 agent 的记忆文件卫生规范：记终态别记流水账，说做什么别说别做什么 | [README](skills/memory-hygiene/README.md) |
-| [ask-first](skills/ask-first/) | 反问协议 v2：开工三件套（类型/Done when/反问批次）、读→改漂移闸门、超时挂起断点（English/中文双语） | [README](skills/ask-first/README.md) |
-| [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | [README](tools/zcode-wallet/README.md) |
-| [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | [README](skills/strategic-coding/README.md) |
-| [publish-privacy-alert](skills/publish-privacy-alert/) | 对外发布前的隐私卫生审查：机器画像驱动扫描 + 四类核对 + 交付物终扫（数据与逻辑分离，画像仅存本机） | [SKILL](skills/publish-privacy-alert/SKILL.md) |
-| [negafix](skills/negafix/) | 负向平行结构禁令与审计（"it's not just X, it's Y"），上游 v1.2.1 + 本地中文检测段 | [SKILL](skills/negafix/SKILL.md) |
+| Skill | 一句话 | 兼容性 | 详细说明 |
+|---|---|---|---|
+| [memory-hygiene](skills/memory-hygiene/) | 给 agent 的记忆文件卫生规范：记终态别记流水账，说做什么别说别做什么 | 通用 | [README](skills/memory-hygiene/README.md) |
+| [ask-first](skills/ask-first/) | 反问协议 v2：开工三件套（类型/Done when/反问批次）、读→改漂移闸门、超时挂起断点（English/中文双语） | 文本通用；hook 见下 | [README](skills/ask-first/README.md) |
+| [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | 仅 ZCode | [README](tools/zcode-wallet/README.md) |
+| [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | 通用 | [README](skills/strategic-coding/README.md) |
+| [publish-privacy-alert](skills/publish-privacy-alert/) | 对外发布前的隐私卫生审查：机器画像驱动扫描 + 四类核对 + 交付物终扫（数据与逻辑分离，画像仅存本机） | 通用 | [SKILL](skills/publish-privacy-alert/SKILL.md) |
+| [test-hygiene](skills/test-hygiene/) | 测试卫生：红先绿后、断言只来自规格、突变判据审测试、实现与测试上下文隔离 | 通用 | [SKILL](skills/test-hygiene/SKILL.md) |
+| [negafix](skills/negafix/) | 负向平行结构禁令与审计（"it's not just X, it's Y"），上游 v1.2.1 + 本地中文检测段 | 通用 | [SKILL](skills/negafix/SKILL.md) |
+
+兼容性口径："通用"=SKILL.md 文本对任何 SKILL.md 类 harness（ZCode/dsh/Claude Code）装上即用；"仅 ZCode"=功能绑定 ZCode 的本地数据（db/rollout）。hook 的兼容性单独一节见下。
 
 ## 安装
 
@@ -35,7 +38,9 @@ negafix 不在默认 `SKILLS` 列表：它是第三方 skill（上游 Ihor Orlov
 
 **templates**：安装结束会打印所选 skill 的 AGENTS.md 引用块；另有 [templates/output-style.md](templates/output-style.md)——输出风格三行的正本，跨 harness 通用，贴进各 harness 的输出风格节或等价位置。
 
-**hooks（可选，仅 ZCode）**：`--hooks` 把 `hooks/askfirst-gate.js` 装到 `~/.zcode/hooks/` 并合并进 `~/.zcode/cli/config.json` 的 hooks 配置。两类作用：①开工、第一次落笔、收尾三个时刻注入提醒（开工三件套 / 读→改漂移 / 翻转超限对账）；②Bash 变更/外发门禁（v3）——外发不可逆（git push、npm publish/unpublish、gh repo|release 删发、gh api 写操作）首拦；覆盖/删除类 hook 自查目标存在性，有东西可丢才拦；git 状态覆盖类首拦；就地修改类提醒。被拦后重跑同一命令即放行。这是安装器唯一会改你文件的步骤：自动备份 config.json、幂等可重跑、回滚=把打印出的备份文件复制回去。不带 `--hooks` 时一切照旧，只拷贝和打印。
+**hooks（可选，ZCode 与 dsh 双变体）**：ask-first 的结构闸门有两个 harness 变体——`hooks/askfirst-gate.js`（ZCode：装到 `~/.zcode/hooks/`，`--hooks` 自动合并进 `~/.zcode/cli/config.json`）与 `hooks/askfirst-gate.dsh.js`（DSH：装到 `~/.dsh/hooks/`，手工注册进 dsh 的 `hooks.json`）。作用：①开工/首次落笔/收尾三时刻注入（开工三件套 / 读→改漂移 / 翻转对账 / M1 完成断言证据门）；②shell 变更/外发门禁——外发不可逆（git push、npm publish/unpublish、gh repo|release 删发、gh api 写）首拦；路径守卫按可回滚性判定（git tracked 放行、脚本区/临时/记忆放行、非 git 或未追踪的既有文件拦一次核对拼写）；git 状态覆盖首拦；就地修改提醒。被拦后**逐字重跑同一命令**即放行。`hooks/test-gate.js`（41 例）、`hooks/test-gate.dsh.js`（45 例）、`hooks/test-sync.js`（契约面同步守卫——两变体的词表/文案/核心判定函数必须等价，有意分叉须带理由进 allowlist）。
+
+**Claude Code 用户**：`./install.sh --claude` 装的是 skill 文本层（软规则），hook 变体未做 CC 适配。想上闸门可以 `askfirst-gate.dsh.js` 为基底自行适配——它是 claude 协议形状（snake_case payload、小写工具名），适配点：CC 的 settings.json hooks 注册格式、CC 的 advisory 走 PreToolUse 的 additionalContext（无需 DSH 的 PostToolUse 绕道）、CC 的 Stop 拦截语义。适配后建议跑一遍 test-gate.dsh.js 的用例形态自证。
 
 zcode-wallet 的 SKILL.md 依赖同名 CLI（单文件纯标准库，源码在 [tools/zcode-wallet/](tools/zcode-wallet/)），先看 [tools/zcode-wallet/README.md](tools/zcode-wallet/README.md) 装好 `zwallet` 再装技能。仓库版 SKILL.md 是路径无关的；若你的本地副本有意写死了 CLI 绝对路径，安装时用 `SKILLS` 跳过它，别让脚本覆盖。
 

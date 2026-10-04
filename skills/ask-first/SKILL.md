@@ -47,6 +47,8 @@ Task typing (v4): ambient/system messages and short continuations never reset th
 
 Parse failures (variables, exotic quoting, unconvertible paths, missing git) fail open — the gate never blocks on uncertainty, only on a positively detected loss.
 
+Hook availability: the gate exists as two harness variants — `hooks/askfirst-gate.js` (ZCode) and `hooks/askfirst-gate.dsh.js` (DSH), kept in sync by `hooks/test-sync.js`. On Claude Code this skill installs as the soft-rules layer (sections 1–5) only; see the repo README for adapting the dsh variant to CC.
+
 ---
 
 # 中文版（Ask First）
@@ -92,3 +94,5 @@ Parse failures (variables, exotic quoting, unconvertible paths, missing git) fai
 任务类型（v4）：ambient/系统消息与短续接不重置任务态；检查/审查/通读类无修改动词判**诊断**（默认零修改，首次修改性写注入诊断纪律 advisory）；关键词未命中判 unknown（首笔修改性写收中性对账）；漂移/对账/诊断**只计修改性写**——工具性/记忆/元配置写是读任务的健康探索，静默。完成断言证据门（v4B，M1）：回合末段含无对冲完成断言（修好了/绿了/is fixed…）且同轮无验证类命令→advisory 要求附证据链或改写为"预期完成，待验证"，每会话至多一次。
 
 解析失败（变量、特殊引号、转不了的路径、git 缺失）一律放行——门禁只在"确认会丢东西"时拦，不确定不拦。
+
+hook 归属：闸门有两个 harness 变体——`hooks/askfirst-gate.js`（ZCode）与 `hooks/askfirst-gate.dsh.js`（DSH），由 `hooks/test-sync.js` 守卫契约面同步。Claude Code 安装本 skill 得到的是软规则层（第 1-5 节）；CC 适配 dsh 变体的路径见仓库 README。
