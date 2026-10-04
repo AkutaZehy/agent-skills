@@ -1,33 +1,51 @@
-// ask-first 开工三件套外置闸门 v3（与 skills/ask-first v2 配套）。
+// ask-first 开工三件套外置闸门 v4（与 skills/ask-first v2 配套）。
 // 用法: node askfirst-gate.js <UserPromptSubmit|PreToolUse|Stop>
 // 安装: ./install.sh --hooks （复制本文件到 ~/.zcode/hooks/ 并合并 ZCode config.json）
 // 输入: stdin JSON (ZCode hook payload)。输出: {hookSpecificOutput:{hookEventName, additionalContext}} 或空(放行)；
-//       Bash 变更/外发门禁拦截时向 stderr 写理由并 exit 2（ZCode 语义：PreToolUse deny）。
-// 任何内部错误都静默 exit 0——闸门故障不得阻塞会话（存在性检查解析失败一律放行）。
+//       拦截时向 stderr 写理由并 exit 2（ZCode 语义：PreToolUse deny）。
+// 任何内部错误都静默 exit 0——闸门故障不得阻塞会话（git/路径解析失败一律放行）。
 // v3: 补 fs require（v2 遗漏导致状态文件从未生效）；新增 Bash 门禁——
 //     变更类阻断式（rm/cp/mv/重定向/解包等，hook 自查目标存在性，有东西可丢才拦，被拦的同一命令重跑放行）；
 //     git 状态覆盖类阻断式（reset --hard/checkout --/restore/stash drop/clean/branch -D/tag -d）；
 //     外发类全拦（git push/npm publish|unpublish/gh repo delete/gh release create|delete|upload/gh api -X 写操作）；
 //     改类提醒式（sed -i/perl -pi/amend/rebase/filter-branch/stash pop/patch，每类每会话提醒一次）。
+// v4（2026-10-04 治理包，基于三周 rollout 审计 askq-*）:
+//   a. ambient/自动消息(in-app-browser-context / SYSTEM NOTIFICATION / Perform a web search)不重分类不重置任务态;
+//   b. RE_CONT 去 \b（纯 CJK 续接 v3 永远失配）;
+//   c. 检查/审查/通读/审计入诊断类（前置，避开"查一下"子串误判检索）;
+//   d. 关键词未命中 fallback=unknown：提交不注入，首笔修改性写收中性对账;
+//   e. RE_MODIFY 词表放宽（更新/修正/调整/补完/整理/做个/写一下/生成/换成/清理/试试/帮我/顺手——"更新"为实测最高频缺失动词）;
+//   f. 漂移只计修改性写（工具性/记忆/元配置写豁免），文案改留痕版，driftCount 入状态文件;
+//   g. 诊断类型：首次修改性写前注入[诊断纪律]（advisory 不拦断）;
+//   h. 路径守卫：写/改/删前判定目标回滚性——临时/缓存、脚本区、记忆目录放行；git tracked 放行；
+//      untracked 预存在或非 git 目录预存在→拦一次核对拼写后重跑放行（confirm-token，防拼错路径+无回滚）;
+//   i. 脚本执行内容扫描：scratch 区脚本执行前静态扫内容，命中 rm/rmSync/sed -i/git push 等→确认一次;
+//   j. Bash 变更门禁豁免 scratch/记忆区（实测工具性 331 次为误拦上限）。
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 
 const EVENT = process.argv[2] || '';
 const HOME = process.env.HOME || process.env.USERPROFILE;
 const ROLLOUT_DIR = process.env.ASKFIRST_ROLLOUT_DIR || path.join(HOME, '.zcode', 'cli', 'rollout');
 const TAIL_BYTES = 256 * 1024;
+const MEMDIR = path.join(HOME, '.zcode', 'cli', 'memories').toLowerCase();
+const ZCODE_ROOT = path.join(HOME, '.zcode').toLowerCase();
+const GIT_TIMEOUT = 1500;
 
 const FLIP_ADV = /\bbut wait\b|\bno wait\b|\bactually wait\b|\bwait no\b|\boh wait\b|\bhold on\b|let me (?:re)?consider|let me re-?read/gi;
 const FLIP_CORE = /\b(?:wait|hmm)\b/gi;
 const FLIP_CN = /等等|其实|(?<![对不])不对(?!称)/g;
 
 const RE_ENV = /卸载|安装|装一?[个下]|配置|环境变量|报错|启动失败|排查|debug|不工作|打不开|无法启动|链接失败|link|install|火绒|代理|pnpm|npm (i|install)/i;
-const RE_PLAN = /想.{0,6}方案|方案|思路|建议|意见|想法|设计如何|怎么样|如何改进|改进空间|评审|审查|分析|说说你的| evaluation/i;
-const RE_MODIFY = /实现|重构|修改|改成|改一下|新增|加一?[个上条]|删除|去掉|替换|修复|fix|refactor|移植|迁移|写一?[个条]|发版|构建|提交|推送/i;
+const RE_PLAN = /想.{0,6}方案|方案|思路|建议|意见|想法|设计如何|怎么样|如何改进|改进空间|评审|分析|说说你的| evaluation/i;
+const RE_DIAG = /检查|审查|通读|审一遍|找.{0,3}问题|挑错|审计|体检|复核|核对|review|过一遍/i;
+const RE_MODIFY = /实现|重构|修改|改成|改一下|更新|修正|调整|补完|补充|新增|加一?[个上条组段节章项行]|删除|去掉|替换|修复|fix|refactor|移植|迁移|写一?[个条份篇章节]|发版|构建|提交|推送|生成|画|导入|导出|批量|重命名|拉取|克隆|恢复|禁用|启用|隐藏|清理|合并|拆|做个|做一个|做一下|写一下|换成|试试|帮我|顺手|改/i;
 const RE_RESEARCH = /调研|是什么|什么是|对比|评估|有哪些|看看|了解|查一下|search|为什么/i;
-const RE_CONT = /^(可以|好的|继续|ok|嗯+|哦|对|是的|行|go|yes|continue|接着|然后|没问题|收到|按|执行|就这样|可以了)\b/i;
+const RE_CONT = /^(可以|好的|继续|ok|嗯+|哦|对|是的|行|go|yes|continue|接着|然后|没问题|收到|按|执行|就这样|可以了|修|发|暂停|先这样|收工|等等)/i;
+const AMBIENT_RE = /^\s*(<in-app-browser-context|Perform a web search for the query:)/;
 
 function readState(sid) {
   try { return JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${sid}.json`), 'utf8')); }
@@ -39,12 +57,17 @@ function writeState(sid, st) {
 function stripEnvelope(s) {
   return String(s || '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
 }
+function isAmbient(raw) {
+  const s = String(raw || '');
+  return AMBIENT_RE.test(s) || /<system-reminder>\s*\[SYSTEM NOTIFICATION/i.test(s);
+}
 function classify(p) {
   if (RE_ENV.test(p)) return '环境';
+  if (RE_DIAG.test(p) && !RE_MODIFY.test(p)) return '诊断';
   if (RE_PLAN.test(p)) return '读';
   if (RE_MODIFY.test(p)) return '改';
   if (RE_RESEARCH.test(p)) return '检索';
-  return '读';
+  return 'unknown';
 }
 function countFlips(text) {
   if (!text) return 0;
@@ -63,11 +86,88 @@ function deny(msg) {
   process.exit(2);
 }
 
+// ── 分区与路径守卫（v4 h/j/f 共用机械） ──────────────────────
+function normWin(p) { return String(p || '').replace(/\//g, '\\').toLowerCase(); }
+function zoneOf(p) {
+  if (!p) return 'unknown';
+  const lp = normWin(p);
+  const tmp = normWin(os.tmpdir());
+  if (lp === tmp || lp.startsWith(tmp + '\\')) return 'scratch';
+  if (lp === ZCODE_ROOT || lp.startsWith(ZCODE_ROOT + '\\')) {
+    if (/\\.zcode\\(skills|hooks)\\/.test(lp)) return 'meta';
+    if (lp === path.join(ZCODE_ROOT, 'cli', 'config.json')) return 'meta';
+    return 'scratch'; // .zcode 根(脚本之家)/tmp/workspace/cli(日志数据)/exec
+  }
+  if (lp === MEMDIR || lp.startsWith(MEMDIR + '\\')) return 'memory';
+  return 'user';
+}
+function gitRootOf(p) {
+  try {
+    const out = execFileSync('git', ['-C', path.dirname(p), 'rev-parse', '--show-toplevel'], { timeout: GIT_TIMEOUT, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
+    return out.trim();
+  } catch { return null; }
+}
+function gitTracked(p, root) {
+  try {
+    execFileSync('git', ['-C', root, 'ls-files', '--error-unmatch', path.relative(root, p)], { timeout: GIT_TIMEOUT, stdio: 'ignore' });
+    return true;
+  } catch { return false; }
+}
+// 路径守卫核心：返回 deny 理由或 null（放行）。op: write|rm|rmdir——write 对新建文件记为 AI 创建。
+function pathGuard(st, w, op) {
+  const zone = zoneOf(w);
+  if (zone === 'scratch' || zone === 'memory' || zone === 'unknown') return null;
+  const key = normWin(w);
+  st.created = st.created || [];
+  st.confirmed = st.confirmed || {};
+  const token = crypto.createHash('md5').update('pg:' + op + ':' + key).digest('hex').slice(0, 12);
+  if (st.confirmed[token] || st.created.includes(key)) return null;
+  if (!fs.existsSync(w)) { // 新建：AI 正在创建，无内容可丢
+    if (op === 'write') st.created.push(key);
+    return null;
+  }
+  const root = gitRootOf(w);
+  if (root) {
+    if (gitTracked(w, root)) return null; // git 可回滚
+    if (op === 'rmdir') {
+      try {
+        const por = execFileSync('git', ['-C', root, 'status', '--porcelain', '--', path.relative(root, w)], { timeout: GIT_TIMEOUT, encoding: 'utf8' });
+        if (!String(por).trim()) return null; // 目录内全干净，删了也能 checkout 回来
+      } catch { return null; }
+    }
+  }
+  st.confirmed[token] = Date.now();
+  const zoneLabel = root ? 'git 仓库内未被追踪的既有文件' : '无版本管理的目录';
+  return `[ask-first 路径守卫] 目标位于${zoneLabel}，改/删后不可回滚：${w}\n先核对路径拼写（大小写/相近目录名），cat/ls 看一眼内容确认没找错目标；确认后重跑同一操作即放行。`;
+}
+// 写行为分类（漂移/诊断/unknown 只计 'mod'）
+const SCRATCH_BASENAME = /(?:^|[_\-.])(test|spec|check|plot|demo|smoke|debug|extract|analyze|analyse|audit|scratch|tmp|temp|verify|parity|build)[\w.\-]*\.(?:js|mjs|cjs|py|ts|sh|ps1|bat)$/i;
+function writeKind(toolName, w) {
+  const zone = zoneOf(w);
+  if (zone === 'scratch') return 'tool';
+  if (zone === 'memory') return 'mem';
+  if (zone === 'meta') return 'meta';
+  if (toolName === 'Write') { // 新建文件用命名启发；Edit 改既有文件天然修改性
+    const bn = path.basename(normWin(w));
+    if (SCRATCH_BASENAME.test(bn)) return 'tool';
+  }
+  return 'mod';
+}
+
 const TRIO_MSG = (type) =>
   `[开工三件套] 本任务分类=${type}。动手前在交付说明开头给出：①类型与对象；②Done when（完成口径）；③一次 AskUserQuestion 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B/范围/术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
 
+const DIAG_TRIO_MSG =
+  `[开工三件套·诊断] 本任务分类=诊断（检查/审查/通读找问题）。①类型与对象；②Done when；③一次 AskUserQuestion 反问批次（≤4题，锚定口径确认与真实分叉；grep 能答的先自查），若无真分叉写明"无分叉"后开工。诊断任务默认零修改：发现问题时先报告并给修复选项，等用户点头或本轮已明示可修再动。`;
+
+const DIAG_MSG =
+  `[诊断纪律] 本任务为诊断/审查，刚才的写入属于修改性操作。默认零修改：要修复先给选项征得同意（或用户本轮已明示可修后继续）；本次已记录，站会审计可见。`;
+
+const UNKNOWN_MSG =
+  `[三件套对账] 本任务开工时类型未明（unknown），现在首次落笔修改。把类型更正为"读并改"并补全三件套声明（类型/Done when/反问批次），确无分叉则写明"无分叉"后继续；本次已记录。`;
+
 const DRIFT_MSG =
-  `[类型漂移] 本任务开工时声明为读/检索，现在第一次落笔修改。按 ask-first 漂移闸门：把类型更正为"读并改"，并补一次 AskUserQuestion 反问批次（锚定 done-when 口径与真实分叉；grep 能答的先自查），或声明"无新分叉"后再继续修改。`;
+  `[类型漂移·留痕] 本任务声明为读/检索，现在落笔修改。把类型更正为"读并改"，声明"无新分叉"或补一次反问批次（锚定 done-when 口径与真实分叉；grep 能答的先自查）。本次漂移已记录（driftCount+1，站会审计可见）。`;
 
 const GATE_MSG =
   `[三件套对账] 本任务尚未见反问批次。落笔前发一次 AskUserQuestion（锚定 done-when 口径与真实分叉），或在回复开头补全三件套声明；若确无分叉，写明"无分叉"后继续。`;
@@ -76,7 +176,6 @@ const FLIP_MSG = (n) =>
   `[ask-first 对账] 最新思考段检测到 ${n} 个翻转信号且本任务未反问：对真实分叉发一次 AskUserQuestion，或写明为何无需问后收尾。`;
 
 // ── Bash 门禁 ───────────────────────────────────────────────
-// 外发类：一律首拦（segment 首词匹配，防 grep "git push" 类误报）
 const EXTERNAL_HEADS = [
   [/^git$/, /^push$/],
   [/^npm$/, /^(publish|unpublish)$/],
@@ -84,10 +183,9 @@ const EXTERNAL_HEADS = [
   [/^gh$/, /^(release|workflow-dispatch)$/, /^(create|delete|upload)$/],
 ];
 const GH_API_WRITE = /gh\s+api\b.*\s-X\s*(DELETE|POST|PUT|PATCH)\b/i;
-// git 状态覆盖类：block-first（便宜的存在性检查套不上，命令本身罕见，重跑放行）
-const GIT_STATE_OVERWRITE = /^--$|^restore$|^reset$|^clean$|^stash$|^branch$|^tag$|^filter-branch$/;
-// 改类提醒
 const REMIND_HEADS = new Set(['sed', 'perl', 'patch', 'apply']);
+const SCRIPT_EXEC_RE = /(?:^|[\s&|;])(?:node|python3?|npx|ts-node|bash|sh)\s+"?([^\s&|;"]+\.(?:js|mjs|cjs|py|ts|sh))"?/g;
+const SCRIPT_DANGER = /rmSync\s*\(|rmtree|unlinkSync\s*\(|os\.remove|shutil\.|\brm\s+-|sed\s+-[a-z]*i|git\s+push|npm\s+publish|gh\s+release/;
 
 function splitSegments(cmd) {
   const segs = [];
@@ -117,21 +215,22 @@ function tokenize(seg) {
 }
 function cmdHead(toks) {
   let i = 0;
-  while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++; // 环境变量前缀
+  while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
   if (i < toks.length && /^(sudo|command|nohup|env)$/i.test(toks[i])) i++;
   const h = toks[i] || '';
   return { head: h.split('/').pop(), rest: toks.slice(i + 1) };
 }
 function toWinPath(p, cwd) {
-  if (!p || /\$/.test(p)) return null; // 变量展开不了，放行
-  p = p.replace(/[^\\]+[\\/]$/, ''); // 去尾分隔符
+  if (!p || /\$/.test(p)) return null;
+  p = p.replace(/[^\\]+[\\/]$/, '');
   if (p === '~') return HOME;
   if (p.startsWith('~/') || p.startsWith('~\\')) p = path.join(HOME, p.slice(2));
   const m = /^\/([a-zA-Z])\/(.*)$/.exec(p);
   if (m) return `${m[1].toUpperCase()}:\\${m[2]}`;
   if (/^\/tmp\b/.test(p)) p = path.join(os.tmpdir(), p.slice(4));
+  if (/^\/dev\b/.test(p)) return null;
   if (/^[a-zA-Z]:[\\/]/.test(p)) return p;
-  if (path.isAbsolute(p)) return null; // 其他 MSYS 根，转不了
+  if (path.isAbsolute(p)) return null;
   return path.resolve(cwd || process.cwd(), p);
 }
 const exists = (p) => { try { return p != null && fs.existsSync(p); } catch { return false; } };
@@ -145,6 +244,26 @@ function redirectTargets(seg) {
   while ((m = re.exec(seg))) out.push(m[1]);
   return out;
 }
+// 脚本内容扫描（v4 i）：scratch 区脚本执行前扫内容
+function scriptScan(st, cmd, cwd) {
+  SCRIPT_EXEC_RE.lastIndex = 0;
+  let m;
+  while ((m = SCRIPT_EXEC_RE.exec(cmd))) {
+    const w = toWinPath(m[1], cwd);
+    if (!w || zoneOf(w) !== 'scratch') continue;
+    let src = '';
+    try { src = fs.readFileSync(w, 'utf8'); } catch { continue; }
+    if (SCRIPT_DANGER.test(src)) {
+      st.confirmed = st.confirmed || {};
+      const token = crypto.createHash('md5').update('scan:' + normWin(w)).digest('hex').slice(0, 12);
+      if (!st.confirmed[token]) {
+        st.confirmed[token] = Date.now();
+        return `[ask-first 脚本内容扫描] ${path.basename(w)} 位于脚本区，但内容含破坏性调用（rm/rmSync/sed -i/git push 等）。核对其目标路径（尤其是否指向用户资产与拼写）后，重跑同一命令即放行。`;
+      }
+    }
+  }
+  return null;
+}
 
 function onBashGate(input, sid) {
   const cmd = (input.toolInput || input.tool_input || {}).command || '';
@@ -155,7 +274,11 @@ function onBashGate(input, sid) {
   const cwd0 = input.cwd || input.workingDirectory || process.cwd();
   const token = crypto.createHash('md5').update(cmd).digest('hex').slice(0, 12);
 
-  let verdict = null; // {kind:'external'|'mutate', msg, target}
+  // v4 i: 脚本内容扫描（先于分段循环，整命令维度）
+  const scanMsg = scriptScan(st, cmd, cwd0);
+  if (scanMsg) { writeState(sid, st); deny(scanMsg); }
+
+  let verdict = null;
   let remind = null;
   let cwd = cwd0;
 
@@ -168,7 +291,7 @@ function onBashGate(input, sid) {
     if (head === 'cd' && rest[0]) { const w = toWinPath(rest[0].replace(/--$/, ''), cwd); if (w) cwd = w; continue; }
     if (/^dry-run$|^n$/.test(flags.replace(/^-+/, '')) || /(^|\s)(--dry-run)(\s|$)/.test(seg)) continue;
 
-    // 外发类
+    // 外发类（不变）
     for (const pat of EXTERNAL_HEADS) {
       if (pat.every((re, i) => re.test([head, ...rest][i] || ''))) {
         verdict = { kind: 'external', msg: `[ask-first 外发门禁] 检出对外发布/不可逆外发（${[head, ...rest].slice(0, pat.length).join(' ')}）。按 AGENTS.md 先经用户确认（AskUserQuestion 批次或用户明示/亲手执行），确认后重跑同一命令即放行。` };
@@ -179,7 +302,7 @@ function onBashGate(input, sid) {
     }
     if (verdict) break;
 
-    // git 状态覆盖类（block-first）
+    // git 状态覆盖类（不变）
     if (head === 'git' && (rest[0] === 'reset' && /--hard/.test(flags) ||
         rest[0] === 'checkout' && (rest[1] === '--' || rest[1] === '-- ') ||
         rest[0] === 'restore' || rest[0] === 'clean' ||
@@ -190,51 +313,69 @@ function onBashGate(input, sid) {
       break;
     }
 
-    // 变更类（存在性检查，有东西可丢才拦）
+    // 变更类：v4 j/h —— scratch/记忆区豁免；用户区走路径守卫（tracked 放行/untracked·非git 预存在确认）
+    const guarded = (p, op) => {
+      const w = toWinPath(p, cwd);
+      if (!w) return null;
+      const zone = zoneOf(w);
+      if (zone === 'scratch' || zone === 'memory' || zone === 'unknown') return null;
+      if (!exists(w)) return null; // 不存在的目标没有可丢内容
+      const msg = pathGuard(st, w, op);
+      return msg ? { kind: 'mutate', msg } : null;
+    };
     const lastPath = () => args[args.length - 1];
     if (head === 'rm' || head === 'unlink' || head === 'shred' || head === 'del' || (head === 'git' && rest[0] === 'rm')) {
       for (const a of args.slice(head === 'git' ? 1 : 0)) {
         if (a.includes('*') || a.includes('?')) continue;
         const w = toWinPath(a, cwd);
-        if (exists(w)) { verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] 将删除已存在目标：${a}。先看目标（ls/cat）确认可弃，再重跑同一命令即放行。` }; break; }
+        if (!w || zoneOf(w) === 'scratch' || zoneOf(w) === 'memory') continue;
+        if (!exists(w)) continue;
+        if (isDir(w)) { const g = pathGuard(st, w, 'rmdir'); if (g) { verdict = { kind: 'mutate', msg: g }; break; } continue; }
+        const g = pathGuard(st, w, 'rm');
+        if (g) { verdict = { kind: 'mutate', msg: g }; break; }
       }
     } else if (head === 'cp' || head === 'mv' || head === 'install' || (head === 'git' && rest[0] === 'mv')) {
-      const dest = toWinPath(lastPath(), cwd);
-      if (dest && exists(dest)) {
-        if (isDir(dest)) {
-          const srcs = args.slice(head === 'git' ? 1 : 0, args.length - 1);
-          for (const s of srcs) { if (exists(path.join(dest, path.basename(s.replace(/[\\/]$/, ''))))) { verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] ${head} 将覆盖已存在文件：${lastPath()}/${path.basename(s)}。先看目标再重跑同一命令即放行。` }; break; } }
-        } else {
-          verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] ${head} 将覆盖已存在文件：${lastPath()}。先看目标（cat/ls）确认可弃，再重跑同一命令即放行。` };
-        }
-      }
+      const g = guarded(lastPath(), 'write');
+      if (g) verdict = g;
     } else if (head === 'rsync') {
-      const dest = toWinPath(lastPath(), cwd);
-      if (exists(dest)) verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] rsync 目标已存在：${lastPath()}。先看目标再重跑同一命令即放行。` };
+      const g = guarded(lastPath(), 'write');
+      if (g) verdict = g;
     } else if (head === 'tee' || head === 'dd') {
       const t = head === 'tee' ? lastPath() : (rest.find((x) => x.startsWith('of=')) || '').slice(3);
-      if (exists(toWinPath(t, cwd))) verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] ${head} 将覆写已存在文件：${t}。先看目标再重跑同一命令即放行。` };
+      const g = guarded(t, 'write');
+      if (g) verdict = g;
     } else if (head === 'curl' || head === 'wget') {
       const f = head === 'curl' ? (rest[rest.indexOf('-o') + 1] || '') : (rest[rest.indexOf('-O') + 1] || '');
-      if (f && exists(toWinPath(f, cwd))) verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] ${head} -o 目标已存在：${f}。先看目标再重跑同一命令即放行。` };
+      const g = guarded(f, 'write');
+      if (g) verdict = g;
     } else if (head === 'tar' && /(^|\s)-[a-zA-Z]*x/.test(seg)) {
       const cIdx = rest.indexOf('-C');
       const dir = cIdx >= 0 ? toWinPath(rest[cIdx + 1], cwd) : cwd;
-      if (nonEmpty(dir)) verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] tar 解包目标目录非空，可能覆盖同名文件（${cIdx >= 0 ? rest[cIdx + 1] : '当前目录'}）。先看目录内容再重跑同一命令即放行。` };
+      if (dir && nonEmpty(dir) && zoneOf(dir) === 'user') {
+        const g = pathGuard(st, dir, 'rmdir');
+        if (g) verdict = { kind: 'mutate', msg: g };
+        else if (!gitRootOf(dir)) verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] tar 解包目标目录非空且无版本管理，可能覆盖同名文件（${cIdx >= 0 ? rest[cIdx + 1] : '当前目录'}）。先看目录内容再重跑同一命令即放行。` };
+      }
     } else if (head === 'unzip' && /(^|\s)-[a-zA-Z]*o/.test(seg)) {
       const dIdx = rest.indexOf('-d');
       const dir = dIdx >= 0 ? toWinPath(rest[dIdx + 1], cwd) : cwd;
-      if (nonEmpty(dir)) verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] unzip -o 目标目录非空，可能覆盖同名文件。先看目录内容再重跑同一命令即放行。` };
+      if (dir && nonEmpty(dir) && zoneOf(dir) === 'user' && !gitRootOf(dir)) {
+        verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] unzip -o 目标目录非空且无版本管理，可能覆盖同名文件。先看目录内容再重跑同一命令即放行。` };
+      }
     }
     if (verdict) break;
 
-    // 重定向（>file 截断覆写；>> 追加不拦）
+    // 重定向（v4 j: scratch/记忆区豁免；用户区走路径守卫）
     for (const t of redirectTargets(seg)) {
-      if (exists(toWinPath(t, cwd))) { verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] > 重定向将截断已存在文件：${t}。先看目标（cat）确认可弃，再重跑同一命令即放行。` }; break; }
+      const w = toWinPath(t, cwd);
+      if (!w || zoneOf(w) === 'scratch' || zoneOf(w) === 'memory' || zoneOf(w) === 'unknown') continue;
+      if (!exists(w)) continue;
+      const g = pathGuard(st, w, 'write');
+      if (g) { verdict = { kind: 'mutate', msg: g }; break; }
     }
     if (verdict) break;
 
-    // 改类提醒（每类每会话一次）
+    // 改类提醒（每类每会话一次，不变）
     const isRemind =
       (head === 'sed' && /(^|\s)-[a-zA-Z]*i/.test(seg)) ||
       (head === 'perl' && /(^|\s)-pi|^".*-pi/.test(seg)) ||
@@ -260,30 +401,69 @@ function onBashGate(input, sid) {
 
 function onUserPromptSubmit(input) {
   const sid = input.sessionId || process.env.CLAUDE_SESSION_ID || 'unknown';
-  const p = stripEnvelope(input.prompt);
+  const raw = input.prompt || '';
+  if (isAmbient(raw)) { // v4 a: 不重分类不重置，只续时
+    const st = readState(sid);
+    if (st) { st.ts = Date.now(); writeState(sid, st); }
+    return;
+  }
+  const p = stripEnvelope(raw);
   if (!p) return;
-  if (p.length < 30 && RE_CONT.test(p)) { const st = readState(sid); if (st) { st.ts = Date.now(); writeState(sid, st); } return; }
+  if (p.length < 30 && RE_CONT.test(p)) { // v4 b: 纯 CJK 续接可命中
+    const st = readState(sid);
+    if (st) { st.ts = Date.now(); writeState(sid, st); }
+    return;
+  }
+  const prev = readState(sid) || {};
   const type = classify(p);
-  writeState(sid, { taskKey: crypto.createHash('md5').update(p.slice(0, 500)).digest('hex').slice(0, 8), type, gateAsked: false, driftNotified: false, flipsNotified: false, ts: Date.now() });
+  writeState(sid, {
+    taskKey: crypto.createHash('md5').update(p.slice(0, 500)).digest('hex').slice(0, 8),
+    type, gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false,
+    driftCount: 0, driftOutcome: null,
+    created: prev.created || [], confirmed: prev.confirmed || {}, reminded: prev.reminded || {},
+    ts: Date.now(),
+  });
   if (type === '改' || type === '环境') emit('UserPromptSubmit', TRIO_MSG(type));
+  else if (type === '诊断') emit('UserPromptSubmit', DIAG_TRIO_MSG);
 }
 
 function onPreToolUse(input) {
   const sid = input.sessionId || process.env.CLAUDE_SESSION_ID || 'unknown';
   const tool = input.toolName || '';
   if (tool === 'Bash') { try { onBashGate(input, sid); } catch {} return; }
-  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, flipsNotified: false, ts: Date.now() };
-  if (tool === 'AskUserQuestion') { st.gateAsked = true; writeState(sid, st); return; }
-  if (st.type === '改' || st.type === '环境') {
-    if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit('PreToolUse', GATE_MSG); }
-  } else if (!st.driftNotified) {
-    st.driftNotified = true; writeState(sid, st); emit('PreToolUse', DRIFT_MSG);
+  if (tool !== 'Edit' && tool !== 'Write' && tool !== 'NotebookEdit') return;
+  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
+  const ti = input.toolInput || input.tool_input || {};
+  const fp = ti.file_path || ti.path || ti.notebook_path || '';
+  const w = fp ? toWinPath(fp, input.cwd) : null;
+
+  // v4 h: 路径守卫（写/改）
+  if (w) {
+    const g = pathGuard(st, w, 'write');
+    if (g) { writeState(sid, st); deny(g); }
   }
+  // v4 f: 漂移/对账/诊断只计修改性写
+  const kind = w ? writeKind(tool, w) : 'mod';
+  if (kind !== 'mod') { writeState(sid, st); return; }
+  if (st.type === '改' || st.type === '环境') {
+    if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit('PreToolUse', GATE_MSG); return; }
+  } else if (st.type === '诊断') {
+    if (!st.diagNotified) { st.diagNotified = true; writeState(sid, st); emit('PreToolUse', DIAG_MSG); return; }
+  } else if (st.type === 'unknown') {
+    if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit('PreToolUse', UNKNOWN_MSG); return; }
+  } else if (!st.driftNotified) {
+    st.driftNotified = true;
+    st.driftCount = (st.driftCount || 0) + 1;
+    writeState(sid, st);
+    emit('PreToolUse', DRIFT_MSG);
+    return;
+  }
+  writeState(sid, st);
 }
 
 function onStop(input) {
   const sid = input.sessionId || process.env.CLAUDE_SESSION_ID || 'unknown';
-  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, flipsNotified: false, ts: Date.now() };
+  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
   if (st.flipsNotified) return;
   const file = path.join(ROLLOUT_DIR, `model-io-sess_${sid}.jsonl`);
   let size = 0; try { size = fs.statSync(file).size; } catch { return; }
