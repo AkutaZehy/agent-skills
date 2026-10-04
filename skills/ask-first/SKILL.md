@@ -33,17 +33,19 @@ Candidate answer first, then brief verification (a few lines); keep the first wo
 
 ## 6. Mutation and external gates (hook-enforced)
 
-The `hooks/askfirst-gate.js` Bash gate enforces edit-operation discipline mechanically (see the edit-operation rule: look at the target before write/modify/delete/move). Behavior on a deny: inspect the target (ls/cat/git status) or get user confirmation, then re-run the same command — an exact re-run passes; that re-run is the "I looked" signal.
+The `hooks/askfirst-gate.js` gates (v4/v4B) enforce edit-operation discipline mechanically (see the edit-operation rule: look at the target before write/modify/delete/move). Behavior on a deny: inspect the target (ls/cat/git status) or get user confirmation, then re-run the same command — an exact re-run passes; that re-run is the "I looked" signal.
 
 | Class | Operations | Gate |
 |---|---|---|
 | External / irreversible | `git push`, `npm publish/unpublish`, `gh repo delete`, `gh release create/delete/upload`, `gh api -X DELETE/POST/PUT/PATCH` | block first; passes after user confirmation (AskUserQuestion or explicit instruction) and re-run |
-| Overwrite (add/move) | `cp`/`mv`/`install`/`git mv` onto an existing path, `> ` redirect onto an existing file, `tee`, `dd of=`, `curl -o`/`wget -O`, `rsync`, `tar -x`/`unzip -o` into a non-empty dir | block only when something exists to lose (hook checks target existence); non-existent targets pass silently |
-| Delete | `rm`/`unlink`/`shred`/`del`/`git rm` on existing paths | same existence check |
 | Git state overwrite | `git reset --hard`, `git checkout -- <path>`, `git restore`, `git stash drop/pop/clear`, `git clean`, `git branch -D`, `git tag -d` | block first (existence cannot be checked cheaply); re-run passes |
+| Path guard (v4) | Edit/Write plus mutating Bash (`rm`, `cp`/`mv`, `> ` redirect, `tee`, `curl -o`, `tar -x`, …) on user-zone targets | rollback-aware, per target: scratch/script zones (`~/.zcode` root, tmp, workspace, OS temp) and the memory dir pass silently; git-tracked files pass (recoverable); AI-created files this session pass; pre-existing untracked files in git and pre-existing files in non-git dirs → block once to verify the path isn't mistyped, re-run passes |
+| Script content scan (v4) | executing a scratch-zone script (`node`/`python`/`npx` …) whose content contains destructive calls (`rm`, `rmSync`, `sed -i`, `git push`, …) | block once to check the script's internal targets; re-run passes |
 | In-place modify | `sed -i`, `perl -pi`, `git commit --amend`, `git rebase`, `git filter-branch`, `git stash pop`, `patch`/`git apply` | remind once per kind per session: verify the pattern hits only what is intended, diff after |
 
-Parse failures (variables, exotic quoting, unconvertible paths) fail open — the gate never blocks on uncertainty, only on a positively detected loss.
+Task typing (v4): ambient/system messages and short continuations never reset the task state; inspection keywords without a modify verb classify as 诊断 (diagnostic — zero-modification by default, first modifying write gets an advisory); unmatched prompts are `unknown` (neutral accounting prompt on first modifying write); drift/对账/诊断 fire only on modifying writes — tool, memory and config writes are healthy exploration and stay silent. Completion-assertion evidence gate (v4B, M1): if the turn's final text contains an unhedged completion claim (修好了/绿了/is fixed …) and the turn ran no verification command, an advisory asks to attach an evidence chain or rewrite as "expected complete, pending verification" — once per session.
+
+Parse failures (variables, exotic quoting, unconvertible paths, missing git) fail open — the gate never blocks on uncertainty, only on a positively detected loss.
 
 ---
 
@@ -75,16 +77,18 @@ Parse failures (variables, exotic quoting, unconvertible paths) fail open — th
 
 先给候选结论再短验证（几行内）；方案第一次可行就沿用；简单任务不跑验证循环。验证冲动是 RL 训练烙进去的，删不掉——当旋钮用，不当开关用。
 
-## 6. 变更与外发门禁（hook 强制）
+## 6. 变更与外发门禁（hook 强制，v4/v4B）
 
-`hooks/askfirst-gate.js` 的 Bash 门禁把编辑操作纪律机械化（写/改/删/挪先看目标）。被拦时的动作：先看目标（ls/cat/git status）或先经用户确认，然后**重跑同一命令即放行**——重跑就是"看过一眼"的信号。
+`hooks/askfirst-gate.js` 的门禁（v4/v4B）把编辑操作纪律机械化（写/改/删/挪先看目标）。被拦时的动作：先看目标（ls/cat/git status）或先经用户确认，然后**重跑同一命令即放行**——重跑就是"看过一眼"的信号（要求逐字相同）。
 
 | 类别 | 操作 | 门禁 |
 |---|---|---|
 | 外发不可逆 | `git push`、`npm publish/unpublish`、`gh repo delete`、`gh release create/delete/upload`、`gh api -X DELETE/POST/PUT/PATCH` | 首拦；经用户确认（AskUserQuestion 或明示）后重跑放行 |
-| 覆盖（增/挪） | `cp`/`mv`/`install`/`git mv` 目标已存在、`>` 重定向截断已有文件、`tee`、`dd of=`、`curl -o`/`wget -O`、`rsync`、`tar -x`/`unzip -o` 解到非空目录 | 有东西可丢才拦（hook 自查目标存在性）；目标不存在静默放行 |
-| 删除 | `rm`/`unlink`/`shred`/`del`/`git rm` 目标已存在 | 同上存在性检查 |
 | git 状态覆盖 | `git reset --hard`、`git checkout -- <路径>`、`git restore`、`git stash drop/pop/clear`、`git clean`、`git branch -D`、`git tag -d` | 首拦（存在性没法便宜检查）；重跑放行 |
+| 路径守卫（v4） | Edit/Write 及变更类 Bash（`rm`、`cp`/`mv`、`>` 重定向、`tee`、`curl -o`、`tar -x`…）落在用户区目标 | 按"可回滚性"逐目标判定：脚本区（`~/.zcode` 根/tmp/workspace、系统临时目录）与记忆目录静默放行；git 已追踪文件放行（可 checkout 回来）；本会话 AI 新建的文件放行；**git 内未追踪的既有文件、非 git 目录的既有文件→拦一次核对路径拼写（防拼错+无回滚），重跑放行**；删目录用 porcelain 范围查 |
+| 脚本内容扫描（v4） | 执行脚本区的脚本（`node`/`python`/`npx`…）且内容含破坏性调用（`rm`/`rmSync`/`sed -i`/`git push`…） | 拦一次核对脚本内部目标；重跑放行 |
 | 就地修改 | `sed -i`、`perl -pi`、`git commit --amend`、`git rebase`、`git filter-branch`、`git stash pop`、`patch`/`git apply` | 每类每会话提醒一次：核对模式只命中预期内容，跑后 diff 自查 |
 
-解析失败（变量、特殊引号、转不了的路径）一律放行——门禁只在"确认会丢东西"时拦，不确定不拦。
+任务类型（v4）：ambient/系统消息与短续接不重置任务态；检查/审查/通读类无修改动词判**诊断**（默认零修改，首次修改性写注入诊断纪律 advisory）；关键词未命中判 unknown（首笔修改性写收中性对账）；漂移/对账/诊断**只计修改性写**——工具性/记忆/元配置写是读任务的健康探索，静默。完成断言证据门（v4B，M1）：回合末段含无对冲完成断言（修好了/绿了/is fixed…）且同轮无验证类命令→advisory 要求附证据链或改写为"预期完成，待验证"，每会话至多一次。
+
+解析失败（变量、特殊引号、转不了的路径、git 缺失）一律放行——门禁只在"确认会丢东西"时拦，不确定不拦。

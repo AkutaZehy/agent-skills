@@ -184,5 +184,68 @@ for (const s of [SID, SID + '-c', SID + '-e', SID + '-f', SID + '-g', SID + '-h'
   try { fs.rmSync(path.join(os.tmpdir(), `zcode-askfirst-${s}.json`), { force: true }); } catch {}
 }
 
+// ── M1 完成断言证据门（v4B）：需要合成 rollout ──
+// onStop 读 ROLLOUT_DIR/model-io-sess-<sid>.jsonl；用 ASKFIRST_ROLLOUT_DIR 指到沙箱。
+console.log('M1 完成断言证据门');
+const M1DIR = path.join(os.tmpdir(), `gatetest-m1-${TS}`);
+fs.mkdirSync(M1DIR, { recursive: true });
+const m1line = (text, bash) => JSON.stringify({
+  completedAt: new Date().toISOString(),
+  request: { body: { messages: [{ role: 'user', content: [{ type: 'text', text: 'q' }] }] } },
+  response: { text, reasoningText: 'r'.repeat(60), toolCalls: bash ? [{ id: 'x1', name: 'Bash', input: { command: bash } }] : [] },
+});
+const m1stop = (sid) => {
+  const r = spawnSync(process.execPath, [HOOK, 'Stop'], {
+    input: JSON.stringify({ sessionId: sid }), encoding: 'utf8', timeout: 8000,
+    env: { ...process.env, ASKFIRST_ROLLOUT_DIR: M1DIR },
+  });
+  return { code: r.status, out: r.stdout || '', err: r.stderr || '' };
+};
+const mk = (name, lines) => { fs.writeFileSync(path.join(M1DIR, `model-io-sess_${name}.jsonl`), lines.join('\n') + '\n'); };
+
+const SIDM = SID + '-m1';
+mk(SIDM, [
+  m1line('中间叙述一段'),
+  m1line('收工，修好了。问题的根源在 X，已按方案处理。'),
+]);
+let rm1 = m1stop(SIDM);
+ok('m1a 纯断言→注入恰一次', rm1.code === 0 && rm1.out.includes('M1 完成断言证据门') && rm1.out.includes('修好'), rm1.out.slice(0, 90));
+rm1 = m1stop(SIDM);
+ok('m1b 同会话第二次→静默(doneGate)', rm1.code === 0 && !rm1.out, rm1.out.slice(0, 60));
+
+const SIDM2 = SID + '-m1b';
+mk(SIDM2, [m1line('可能修好了，你试试看。')]);
+rm1 = m1stop(SIDM2);
+ok('m1c 对冲词→不触发', rm1.code === 0 && !rm1.out, rm1.out.slice(0, 60));
+
+const SIDM3 = SID + '-m1c';
+mk(SIDM3, [m1line('说明如下：\n```\n修好了\n```\n以上是引用。')]);
+rm1 = m1stop(SIDM3);
+ok('m1d 代码块内→不触发', rm1.code === 0 && !rm1.out, rm1.out.slice(0, 60));
+
+const SIDM4 = SID + '-m1d';
+mk(SIDM4, [
+  m1line('跑一下测试', 'npm test 2>&1 | tail -5'),
+  m1line('测试全部通过，修好了。'),
+]);
+rm1 = m1stop(SIDM4);
+ok('m1e 同轮含验证命令→噪声闸免注入', rm1.code === 0 && !rm1.out, rm1.out.slice(0, 60));
+
+const SIDM5 = SID + '-m1e';
+mk(SIDM5, [
+  m1line('前面说过修好了。'),
+  m1line('另外补充一点背景说明。'),
+]);
+rm1 = m1stop(SIDM5);
+ok('m1f 断言在非末段→不触发', rm1.code === 0 && !rm1.out, rm1.out.slice(0, 60));
+
+// M1 用独立状态键，不与 confirmed 混用：构造一个 confirmed 非空的会话再触发
+const SIDM6 = SID + '-m1f';
+mk(SIDM6, [m1line('搞定了一切。')]);
+run('UserPromptSubmit', { sessionId: SIDM6, prompt: '修改一下README更新内容' });
+rm1 = m1stop(SIDM6);
+ok('m1g 有任务态的会话→M1 仍独立触发', rm1.code === 0 && rm1.out.includes('M1'), rm1.out.slice(0, 60));
+try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
+
 console.log(`\n==== ${pass} pass, ${fail} fail ====`);
 if (failures.length) { console.log('FAILURES:'); for (const f of failures) console.log(' -', f); process.exit(1); }

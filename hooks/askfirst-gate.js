@@ -21,6 +21,9 @@
 //      untracked 预存在或非 git 目录预存在→拦一次核对拼写后重跑放行（confirm-token，防拼错路径+无回滚）;
 //   i. 脚本执行内容扫描：scratch 区脚本执行前静态扫内容，命中 rm/rmSync/sed -i/git push 等→确认一次;
 //   j. Bash 变更门禁豁免 scratch/记忆区（实测工具性 331 次为误拦上限）。
+// v4B (M1 完成断言证据门，2026-10-04)：Stop 侧复用同一 tail buffer 单次解析双用——末段 AI 文本命中窄口径
+//   完成断言词且近旁无对冲词、同轮无验证类命令→advisory 注入"列证据或改写为待验证"，每会话一次
+//   （独立键 state.doneGate）。治十六格矩阵⑯格（人盲×AI盲）：无证据背书的完成话术。
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
@@ -174,6 +177,13 @@ const GATE_MSG =
 
 const FLIP_MSG = (n) =>
   `[ask-first 对账] 最新思考段检测到 ${n} 个翻转信号且本任务未反问：对真实分叉发一次 AskUserQuestion，或写明为何无需问后收尾。`;
+
+// v4B (M1) 完成断言证据门：窄口径完成词 + 近旁对冲排除 + 同轮验证命令豁免
+const DONE_RE = /修好了|搞定了|弄好了|已修复|完成[了。]|测试(全部)?通过|绿了|问题解决|已解决|可以用了|能用了|should (now )?work|works now|is fixed|all (tests )?pass|fixed\./gi;
+const HEDGE_NEAR = /可能|或许|也许|不一定|不确定|试试看|might|maybe|possibly|perhaps|not sure/i;
+const VERIFY_RE = /(npm|pnpm|yarn)\s+(test|run\s+test|run\s+build)|pytest|python\s+-m\s+pytest|node\s+--test|vitest|\bjest\b|\btsc\b|cargo\s+test|\bgo\s+test\b|make\s+(test|check)|\bnode\s+[^\s&|;]*(test|verify|check|smoke)[^\s&|;]*\.(js|mjs|cjs|py)\b/i;
+const M1_MSG = (w) =>
+  `[M1 完成断言证据门] 本轮收尾含完成断言（命中：${w}）。完成态表述需附证据链之一：①背书的测试/命令及其实际结果；②构建产物或实测输出引用。无法实证的部分改写为"预期完成，待验证"。（同轮已含验证命令的回合不触发；每会话至多一次）`;
 
 // ── Bash 门禁 ───────────────────────────────────────────────
 const EXTERNAL_HEADS = [
@@ -463,24 +473,63 @@ function onPreToolUse(input) {
 
 function onStop(input) {
   const sid = input.sessionId || process.env.CLAUDE_SESSION_ID || 'unknown';
-  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
-  if (st.flipsNotified) return;
+  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, doneGate: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
   const file = path.join(ROLLOUT_DIR, `model-io-sess_${sid}.jsonl`);
   let size = 0; try { size = fs.statSync(file).size; } catch { return; }
   const start = Math.max(0, size - TAIL_BYTES);
   let buf;
   try { const fd = fs.openSync(file, 'r'); buf = Buffer.alloc(size - start); fs.readSync(fd, buf, 0, buf.length, start); fs.closeSync(fd); } catch { return; }
   const lines = buf.toString('utf8').split('\n');
+  // 单次解析双用：翻转对账(v2-) + M1 完成断言(v4B)
   const segs = []; let asks = 0;
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    let rec; try { rec = JSON.parse(line); } catch { continue; }
-    const th = rec.response && rec.response.reasoningText;
+  const texts = []; const turnBash = [];
+  let turnStart = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    let rec; try { rec = JSON.parse(lines[i]); } catch { continue; }
+    const msgs = rec.request && rec.request.body && rec.request.body.messages;
+    const last = Array.isArray(msgs) && msgs.length ? msgs[msgs.length - 1] : null;
+    if (last && last.role === 'user') {
+      const c = last.content;
+      const isTR = Array.isArray(c) && c.some((b) => b && b.type === 'tool_result');
+      const isText = typeof c === 'string' || (Array.isArray(c) && c.some((b) => b && b.type === 'text'));
+      if (isText && !isTR) turnStart = i; // 回合边界：最后一条真实用户文本消息
+    }
+    const resp = rec.response;
+    if (!resp) continue;
+    if (resp.text) texts.push({ i, t: resp.text });
+    const th = resp.reasoningText;
     if (typeof th === 'string' && th.length > 50) segs.push(th);
-    for (const tc of (rec.response && rec.response.toolCalls) || []) {
-      if (((tc.function && tc.function.name) || tc.name || '') === 'AskUserQuestion') asks++;
+    for (const tc of resp.toolCalls || []) {
+      const nm = (tc.function && tc.function.name) || tc.name || '';
+      if (nm === 'AskUserQuestion') asks++;
+      if (nm === 'Bash' && i >= turnStart) {
+        const a = tc.input !== undefined ? tc.input : tc.arguments;
+        const cmd = (a && typeof a === 'object' && a.command) || '';
+        if (cmd) turnBash.push(cmd);
+      }
     }
   }
+  // v4B M1：末段完成断言（剥代码块；对冲近旁排除；同轮验证豁免；每会话一次）
+  if (!st.doneGate && texts.length) {
+    const inTurn = texts.filter((x) => turnStart < 0 || x.i >= turnStart);
+    const finalText = (inTurn.length ? inTurn[inTurn.length - 1] : texts[texts.length - 1]).t;
+    const clean = String(finalText).replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
+    let m, hit = null;
+    DONE_RE.lastIndex = 0;
+    while ((m = DONE_RE.exec(clean))) {
+      const around = clean.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
+      if (!HEDGE_NEAR.test(around)) { hit = m[0]; break; }
+    }
+    const verified = turnBash.some((c) => VERIFY_RE.test(c));
+    if (hit && !verified) {
+      st.doneGate = true; writeState(sid, st);
+      emit('Stop', M1_MSG(hit));
+      return;
+    }
+  }
+  // 翻转对账（v2- 原逻辑）
+  if (st.flipsNotified) return;
   if (asks > 0 || segs.length === 0) return;
   const last = countFlips(segs[segs.length - 1]);
   const prev = countFlips(segs[segs.length - 2] || '');
