@@ -19,6 +19,8 @@ const MUST_EQUAL = [
   'SCRIPT_DANGER', 'SCRIPT_EXEC_RE', 'VERIFY_RE',
   // PowerShell 别名集（回流后两侧等价）
   'PS_RM', 'PS_CP', 'PS_MV', 'PS_SETCONTENT',
+  // 确认点门禁（v4C：词表/文案/谓词，改一侧必须改另一侧）
+  'CONFIRM_RE', 'CONFIRM_ASK_RE', 'confirmMsg', 'confirmBlocked',
   // 命令词法（回流后两侧等价）
   'tokenize', 'splitSegments', 'cmdHead', 'toWinPath',
   // 核心判定函数（回滚判据/写分档/git 检查）

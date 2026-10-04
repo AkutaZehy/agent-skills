@@ -24,6 +24,13 @@
 // v4B (M1 完成断言证据门，2026-10-04)：Stop 侧复用同一 tail buffer 单次解析双用——末段 AI 文本命中窄口径
 //   完成断言词且近旁无对冲词、同轮无验证类命令→advisory 注入"列证据或改写为待验证"，每会话一次
 //   （独立键 state.doneGate）。治十六格矩阵⑯格（人盲×AI盲）：无证据背书的完成话术。
+// v4C (确认点门禁，2026-10-04，治"question 绕行"违规)：用户流程指令中的硬停点（"我再确认文件名"
+//   "先写一下我看看风格"）与 AI 问题文本中的确认承诺（"文件名我组装后你再确认"）状态化为
+//   state.pendingConfirm；期间 user 区写/Edit/Bash 写路径/重定向/cp·mv 目标一律硬拦（新建也拦，
+//   不记 token——重跑不放行，区别于路径守卫），仅真实用户轮（UserPromptSubmit）解除——
+//   AskUserQuestion 的选项回答是 tool_result 形态不触发 UPS，不解除（正是违规形态：问了很多问题、
+//   用户答了系列名，组装后的文件名与样张从未给用户看就直接落盘）。scratch/记忆/meta 区与
+//   工具脚本命名（SCRATCH_BASENAME）不受限。确认 deny 计数入 state.confirmDenies（站会审计可见）。
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
@@ -49,6 +56,12 @@ const RE_MODIFY = /实现|重构|修改|改成|改一下|更新|修正|调整|�
 const RE_RESEARCH = /调研|是什么|什么是|对比|评估|有哪些|看看|了解|查一下|search|为什么/i;
 const RE_CONT = /^(可以|好的|继续|ok|嗯+|哦|对|是的|行|go|yes|continue|接着|然后|没问题|收到|按|执行|就这样|可以了|修|发|暂停|先这样|收工|等等)/i;
 const AMBIENT_RE = /^\s*(<in-app-browser-context|Perform a web search for the query:)/;
+
+// v4C 确认点门禁：用户流程指令中的硬停点（"我再确认X""先写一下我看看"）与 AI 问题文本中的确认承诺
+// （"文件名我组装后你再确认"）状态化为 pendingConfirm；期间用户资产写硬拦（无 token 重跑放行机制），
+// 仅真实用户轮（UserPromptSubmit）解除——AskUserQuestion 的选项回答是 tool_result 形态，不解除。
+const CONFIRM_RE = /我再确认|等我确认|我确认一下|我过目|我拍板|先给我看|写一下我看看|我看看再|看看风格|看看.{0,8}再说|看完再|确认后再|确认之后|我看完[后再]/;
+const CONFIRM_ASK_RE = /(你|我)再?确认|先给[你我]看|[你我]看看|给我看一?下/;
 
 function readState(sid) {
   try { return JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${sid}.json`), 'utf8')); }
@@ -156,6 +169,14 @@ function writeKind(toolName, w) {
   }
   return 'mod';
 }
+// v4C: 确认点拦截谓词——pending 期间 user 区写（工具脚本命名豁免），scratch/memory/meta 不受限
+function confirmBlocked(st, w, kind) {
+  if (!st || !st.pendingConfirm) return false;
+  if (kind === 'tool') return false;
+  return zoneOf(w) === 'user';
+}
+const confirmMsg = (st) =>
+  `[ask-first 确认点门禁] 用户在本轮保留了确认权（「${(st && st.pendingConfirm && st.pendingConfirm.q) || ''}」）。先把拟落笔的文件名/样张/方案贴出来等用户回复，用户回应（普通消息即可；AskUserQuestion 的选项回答不算）后继续；scratch/记忆区与工具脚本不受限。本拦不因重跑同一操作而放行。`;
 
 const TRIO_MSG = (type) =>
   `[开工三件套] 本任务分类=${type}。动手前在交付说明开头给出：①类型与对象；②Done when（完成口径）；③一次 AskUserQuestion 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B、范围、术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
@@ -344,6 +365,7 @@ function onBashGate(input, sid) {
       if (!w) return null;
       const zone = zoneOf(w);
       if (zone === 'scratch' || zone === 'memory' || zone === 'unknown') return null;
+      if (confirmBlocked(st, w, 'mod')) return { kind: 'confirm', msg: confirmMsg(st) }; // v4C: 新建也拦，先于 exists
       if (!exists(w)) return null; // 不存在的目标没有可丢内容
       const msg = pathGuard(st, w, op);
       return msg ? { kind: 'mutate', msg } : null;
@@ -396,10 +418,11 @@ function onBashGate(input, sid) {
     }
     if (verdict) break;
 
-    // 重定向（v4 j: scratch/记忆区豁免；用户区走路径守卫）
+    // 重定向（v4 j: scratch/记忆区豁免；用户区走路径守卫；v4C: 确认点先于 exists 检查）
     for (const t of redirectTargets(seg)) {
       const w = toWinPath(t, cwd);
       if (!w || zoneOf(w) === 'scratch' || zoneOf(w) === 'memory' || zoneOf(w) === 'unknown') continue;
+      if (confirmBlocked(st, w, 'mod')) { verdict = { kind: 'confirm', msg: confirmMsg(st) }; break; }
       if (!exists(w)) continue;
       const g = pathGuard(st, w, 'write');
       if (g) { verdict = { kind: 'mutate', msg: g }; break; }
@@ -421,8 +444,12 @@ function onBashGate(input, sid) {
   }
 
   if (verdict) {
-    if (st.confirmed[token]) { writeState(sid, st); return; } // 看过/确认过的同一命令，放行
-    st.confirmed[token] = Date.now();
+    if (verdict.kind !== 'confirm') { // v4C: 确认点拦不走 token 重跑放行——只有用户轮解除
+      if (st.confirmed[token]) { writeState(sid, st); return; } // 看过/确认过的同一命令，放行
+      st.confirmed[token] = Date.now();
+    } else {
+      st.confirmDenies = (st.confirmDenies || 0) + 1;
+    }
     writeState(sid, st);
     deny(verdict.msg);
   }
@@ -433,7 +460,8 @@ function onBashGate(input, sid) {
 function onUserPromptSubmit(input) {
   const sid = input.sessionId || process.env.CLAUDE_SESSION_ID || 'unknown';
   const raw = input.prompt || '';
-  if (isAmbient(raw)) { // v4 a: 不重分类不重置，只续时
+  const answered = /^User has answered your questions/i.test(stripEnvelope(raw)); // v4C: 问答回应是 tool_result 形态，不清 pending
+  if (isAmbient(raw) || answered) { // v4 a: 不重分类不重置，只续时
     const st = readState(sid);
     if (st) { st.ts = Date.now(); writeState(sid, st); }
     return;
@@ -442,18 +470,21 @@ function onUserPromptSubmit(input) {
   if (!p) return;
   if (p.length < 30 && RE_CONT.test(p)) { // v4 b: 纯 CJK 续接可命中
     const st = readState(sid);
-    if (st) { st.ts = Date.now(); writeState(sid, st); }
+    if (st) { st.ts = Date.now(); st.pendingConfirm = null; writeState(sid, st); } // v4C: 续接=用户回应→解除确认点
     return;
   }
   const prev = readState(sid) || {};
   const type = classify(p);
-  writeState(sid, {
+  const next = {
     taskKey: crypto.createHash('md5').update(p.slice(0, 500)).digest('hex').slice(0, 8),
     type, gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false,
     driftCount: 0, driftOutcome: null,
     created: prev.created || [], confirmed: prev.confirmed || {}, reminded: prev.reminded || {},
     ts: Date.now(),
-  });
+  }; // 注：旧 pendingConfirm 在重建时自然丢弃=用户轮解除
+  const cm = CONFIRM_RE.exec(p); // v4C: 新指令含确认点→重新武装
+  if (cm) next.pendingConfirm = { q: cm[0], ts: Date.now() };
+  writeState(sid, next);
   if (type === '改' || type === '环境') emit('UserPromptSubmit', TRIO_MSG(type));
   else if (type === '诊断') emit('UserPromptSubmit', DIAG_TRIO_MSG);
 }
@@ -462,6 +493,18 @@ function onPreToolUse(input) {
   const sid = input.sessionId || process.env.CLAUDE_SESSION_ID || 'unknown';
   const tool = input.toolName || '';
   if (tool === 'Bash') { try { onBashGate(input, sid); } catch {} return; }
+  if (tool === 'AskUserQuestion') { // v4C: AI 问题文本中的确认承诺（"…你再确认"）也状态化
+    try {
+      const ti = input.toolInput || input.tool_input || {};
+      const s = JSON.stringify(ti || {});
+      const m = s && CONFIRM_ASK_RE.exec(s);
+      if (m) {
+        const st = readState(sid) || { pendingConfirm: null };
+        if (!st.pendingConfirm) { st.pendingConfirm = { q: m[0], ts: Date.now() }; writeState(sid, st); }
+      }
+    } catch {}
+    return;
+  }
   if (tool !== 'Edit' && tool !== 'Write' && tool !== 'NotebookEdit') return;
   const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
   const ti = input.toolInput || input.tool_input || {};
@@ -473,8 +516,15 @@ function onPreToolUse(input) {
     const g = pathGuard(st, w, 'write');
     if (g) { writeState(sid, st); deny(g); }
   }
+  // v4C: 确认点门禁（新建也拦，不依赖 exists；不记 token，仅用户轮解除）
+  const kind0 = w ? writeKind(tool, w) : 'mod';
+  if (confirmBlocked(st, w, kind0)) {
+    st.confirmDenies = (st.confirmDenies || 0) + 1;
+    writeState(sid, st);
+    deny(confirmMsg(st));
+  }
   // v4 f: 漂移/对账/诊断只计修改性写
-  const kind = w ? writeKind(tool, w) : 'mod';
+  const kind = kind0;
   if (kind !== 'mod') { writeState(sid, st); return; }
   if (st.type === '改' || st.type === '环境') {
     if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit('PreToolUse', GATE_MSG); return; }

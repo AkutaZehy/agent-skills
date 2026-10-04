@@ -193,11 +193,57 @@ ok('r7 cp 覆盖 untracked→路径守卫拦', r.code === 2 && r.err.includes('�
 r = bashA(`mkdir -p ${W(NONGIT)}/sub && echo x > ${W(NONGIT)}/sub/f.txt && tar -xf nope.tgz -C ${W(NONGIT)}`);
 ok('r8 tar 解到非空非git目录→拦', r.code === 2 && (r.err.includes('路径守卫') || r.err.includes('非空')), r.err.slice(0, 80));
 
+// ── T-C 确认点门禁（v4C）：用户保留确认权期间，用户资产写硬拦，用户轮解除 ──
+console.log('TC 确认点门禁');
+const SIDC = SID + '-cf';
+const submitC = (p) => run('UserPromptSubmit', { session_id: SIDC, prompt: p });
+const editC = (fp) => run('PreToolUse', { session_id: SIDC, tool_name: 'edit', tool_input: { file_path: fp, old_string: 'a', new_string: 'b' }, cwd: HOME });
+const bashC = (command) => run('PreToolUse', { session_id: SIDC, tool_name: 'pwsh', tool_input: { command }, cwd: HOME });
+const NEWPOST = path.join(REPO, `2026-10-04-样张-${TS}.md`);
+
+submitC('拟总标题和文件（问题本身，我再确认文件名），然后把记忆系统线先写一下我看看风格');
+r = editC(NEWPOST);
+ok('c1 确认点期间新建用户资产→硬拦', r.code === 2 && r.err.includes('确认点门禁'), `code=${r.code} ${r.err.slice(0, 80)}`);
+r = editC(NEWPOST);
+ok('c2 重跑同操作不放行(无token机制)', r.code === 2 && r.err.includes('确认点门禁'), `code=${r.code}`);
+r = editC(path.join(REPO, 'tracked.txt'));
+ok('c3 确认点期间改 tracked 既有文件→拦', r.code === 2 && r.err.includes('确认点门禁'), `code=${r.code} ${r.err.slice(0, 60)}`);
+r = editC(path.join(os.tmpdir(), `cf-tool-${TS}.js`));
+ok('c4 确认点期间 scratch 写→豁免', r.code === 0 && !r.err, r.err.slice(0, 60));
+r = run('PreToolUse', { session_id: SIDC, tool_name: 'write', tool_input: { file_path: path.join(REPO, `test-confirm-${TS}.js`), content: 'x' }, cwd: HOME });
+ok('c5 确认点期间 repo 内工具脚本命名→豁免(tool)', r.code === 0 && !r.err, r.err.slice(0, 60));
+r = bashC(`echo hi > ${W(NEWPOST)}`);
+ok('c6 确认点期间重定向写用户区新文件→拦(不依赖exists)', r.code === 2 && r.err.includes('确认点门禁'), `code=${r.code}`);
+r = bashC(`cp ${W(path.join(REPO, 'tracked.txt'))} ${W(NEWPOST)}`);
+ok('c7 确认点期间 cp 到用户区→拦', r.code === 2 && r.err.includes('确认点门禁'), `code=${r.code}`);
+r = bashC(`echo hi > ${W(TMPSCRATCH)}`);
+ok('c8 确认点期间 scratch 重定向→豁免', r.code === 0 && !r.err, r.err.slice(0, 60));
+
+submitC('User has answered your questions: "x"="y"');
+r = editC(NEWPOST);
+ok('c9 问答式回应不清除pending(tool_result形态)', r.code === 2 && r.err.includes('确认点门禁'), `code=${r.code}`);
+
+submitC('可以，就这个文件名');
+r = editC(NEWPOST);
+ok('c10 用户轮到达→清除→放行', r.code === 0 && !r.err, r.err.slice(0, 80));
+
+run('PreToolUse', { session_id: SIDC, tool_name: 'ask_user_question', tool_input: { questions: [{ question: '系列（一）装什么？（系列名按第一题选定，文件名我组装后你再确认）', options: [] }] } });
+r = editC(path.join(REPO, `ask-promise-${TS}.md`));
+ok('c11 AI问题文本含"你再确认"承诺→落笔拦', r.code === 2 && r.err.includes('确认点门禁'), `code=${r.code} ${r.err.slice(0, 60)}`);
+submitC('看到了，没问题');
+r = editC(path.join(REPO, `ask-promise-${TS}.md`));
+ok('c12 用户轮后AI承诺门解除', r.code === 0 && !r.err, r.err.slice(0, 60));
+
+const SIDD = SID + '-cf2';
+run('UserPromptSubmit', { session_id: SIDD, prompt: '修改一下README更新内容，改完发我' });
+r = run('PreToolUse', { session_id: SIDD, tool_name: 'edit', tool_input: { file_path: path.join(REPO, 'tracked.txt'), old_string: 'a', new_string: 'b' }, cwd: HOME });
+ok('c13 无确认措辞→不走确认门', r.code === 0 && !r.err.includes('确认点门禁'), `code=${r.code}`);
+
 // ── 清理（先于 M1，M1 用独立目录） ──
 for (const d of [NONGIT, REPO]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
 for (const f of [SCRATCH_SCRIPT, TMPSCRATCH]) { try { fs.rmSync(f, { force: true }); } catch {} }
 try { fs.rmSync(path.join(HOME, '.zcode', 'cli', 'memories', 'projects', `gatetest-${TS}`), { recursive: true, force: true }); } catch {}
-for (const s of [SID, SID + '-c', SID + '-e', SID + '-f', SID + '-g', SID + '-h', SID + '-i', SID + '-j']) {
+for (const s of [SID, SID + '-c', SID + '-e', SID + '-f', SID + '-g', SID + '-h', SID + '-i', SID + '-j', SID + '-cf', SID + '-cf2']) {
   try { fs.rmSync(path.join(os.tmpdir(), `zcode-askfirst-${s}.json`), { force: true }); } catch {}
 }
 

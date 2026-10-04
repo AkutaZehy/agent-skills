@@ -33,7 +33,7 @@ Candidate answer first, then brief verification (a few lines); keep the first wo
 
 ## 6. Mutation and external gates (hook-enforced)
 
-The `hooks/askfirst-gate.js` gates (v4/v4B) enforce edit-operation discipline mechanically (see the edit-operation rule: look at the target before write/modify/delete/move). Behavior on a deny: inspect the target (ls/cat/git status) or get user confirmation, then re-run the same command — an exact re-run passes; that re-run is the "I looked" signal.
+The `hooks/askfirst-gate.js` gates (v4/v4B/v4C) enforce edit-operation discipline mechanically (see the edit-operation rule: look at the target before write/modify/delete/move). Behavior on a deny: inspect the target (ls/cat/git status) or get user confirmation, then re-run the same command — an exact re-run passes; that re-run is the "I looked" signal. Exception: confirmation-point denies (v4C below) never pass on re-run — only a real user turn clears them.
 
 | Class | Operations | Gate |
 |---|---|---|
@@ -41,9 +41,10 @@ The `hooks/askfirst-gate.js` gates (v4/v4B) enforce edit-operation discipline me
 | Git state overwrite | `git reset --hard`, `git checkout -- <path>`, `git restore`, `git stash drop/pop/clear`, `git clean`, `git branch -D`, `git tag -d` | block first (existence cannot be checked cheaply); re-run passes |
 | Path guard (v4) | Edit/Write plus mutating Bash (`rm`, `cp`/`mv`, `> ` redirect, `tee`, `curl -o`, `tar -x`, …) on user-zone targets | rollback-aware, per target: scratch/script zones (`~/.zcode` root, tmp, workspace, OS temp) and the memory dir pass silently; git-tracked files pass (recoverable); AI-created files this session pass; pre-existing untracked files in git and pre-existing files in non-git dirs → block once to verify the path isn't mistyped, re-run passes |
 | Script content scan (v4) | executing a scratch-zone script (`node`/`python`/`npx` …) whose content contains destructive calls (`rm`, `rmSync`, `sed -i`, `git push`, …) | block once to check the script's internal targets; re-run passes |
+| Confirmation point (v4C) | user-zone writes (also new files, also via Bash redirect/`cp`/`mv`/`Set-Content`) while the user's instruction contains a hard stop ("我再确认文件名", "先写一下我看看风格") or the assistant's own question text promised one ("文件名我组装后你再确认") | hard block, no re-run pass; show the assembled name/sample/plan and wait — only a real user message (UserPromptSubmit) clears it; AskUserQuestion option answers do NOT clear it |
 | In-place modify | `sed -i`, `perl -pi`, `git commit --amend`, `git rebase`, `git filter-branch`, `git stash pop`, `patch`/`git apply` | remind once per kind per session: verify the pattern hits only what is intended, diff after |
 
-Task typing (v4): ambient/system messages and short continuations never reset the task state; inspection keywords without a modify verb classify as 诊断 (diagnostic — zero-modification by default, first modifying write gets an advisory); unmatched prompts are `unknown` (neutral accounting prompt on first modifying write); drift/对账/诊断 fire only on modifying writes — tool, memory and config writes are healthy exploration and stay silent. Completion-assertion evidence gate (v4B, M1): if the turn's final text contains an unhedged completion claim (修好了/绿了/is fixed …) and the turn ran no verification command, an advisory asks to attach an evidence chain or rewrite as "expected complete, pending verification" — once per session.
+Task typing (v4): ambient/system messages and short continuations never reset the task state; inspection keywords without a modify verb classify as 诊断 (diagnostic — zero-modification by default, first modifying write gets an advisory); unmatched prompts are `unknown` (neutral accounting prompt on first modifying write); drift/对账/诊断 fire only on modifying writes — tool, memory and config writes are healthy exploration and stay silent. Completion-assertion evidence gate (v4B, M1): if the turn's final text contains an unhedged completion claim (修好了/绿了/is fixed …) and the turn ran no verification command, an advisory asks to attach an evidence chain or rewrite as "expected complete, pending verification" — once per session. Stepwise-authorization guard (v4C): an answer to one question authorizes only that step — asking more questions never substitutes for a confirmation point the user (or your own question text) explicitly reserved.
 
 Parse failures (variables, exotic quoting, unconvertible paths, missing git) fail open — the gate never blocks on uncertainty, only on a positively detected loss.
 
@@ -79,9 +80,9 @@ Hook availability: the gate exists as two harness variants — `hooks/askfirst-g
 
 先给候选结论再短验证（几行内）；方案第一次可行就沿用；简单任务不跑验证循环。验证冲动是 RL 训练烙进去的，删不掉——当旋钮用，不当开关用。
 
-## 6. 变更与外发门禁（hook 强制，v4/v4B）
+## 6. 变更与外发门禁（hook 强制，v4/v4B/v4C）
 
-`hooks/askfirst-gate.js` 的门禁（v4/v4B）把编辑操作纪律机械化（写/改/删/挪先看目标）。被拦时的动作：先看目标（ls/cat/git status）或先经用户确认，然后**重跑同一命令即放行**——重跑就是"看过一眼"的信号（要求逐字相同）。
+`hooks/askfirst-gate.js` 的门禁（v4/v4B/v4C）把编辑操作纪律机械化（写/改/删/挪先看目标）。被拦时的动作：先看目标（ls/cat/git status）或先经用户确认，然后**重跑同一命令即放行**——重跑就是"看过一眼"的信号（要求逐字相同）。例外：确认点门禁（v4C，见下表）**重跑不放行**，只有真实用户消息解除。
 
 | 类别 | 操作 | 门禁 |
 |---|---|---|
@@ -89,9 +90,10 @@ Hook availability: the gate exists as two harness variants — `hooks/askfirst-g
 | git 状态覆盖 | `git reset --hard`、`git checkout -- <路径>`、`git restore`、`git stash drop/pop/clear`、`git clean`、`git branch -D`、`git tag -d` | 首拦（存在性没法便宜检查）；重跑放行 |
 | 路径守卫（v4） | Edit/Write 及变更类 Bash（`rm`、`cp`/`mv`、`>` 重定向、`tee`、`curl -o`、`tar -x`…）落在用户区目标 | 按"可回滚性"逐目标判定：脚本区（`~/.zcode` 根/tmp/workspace、系统临时目录）与记忆目录静默放行；git 已追踪文件放行（可 checkout 回来）；本会话 AI 新建的文件放行；**git 内未追踪的既有文件、非 git 目录的既有文件→拦一次核对路径拼写（防拼错+无回滚），重跑放行**；删目录用 porcelain 范围查 |
 | 脚本内容扫描（v4） | 执行脚本区的脚本（`node`/`python`/`npx`…）且内容含破坏性调用（`rm`/`rmSync`/`sed -i`/`git push`…） | 拦一次核对脚本内部目标；重跑放行 |
+| 确认点（v4C） | pending 期间的用户区写（含新建文件，含 Bash 重定向/`cp`/`mv`/`Set-Content` 路径） | 硬拦不因重跑放行：把拟落笔的文件名/样张/方案贴出来等用户回复；**只有真实用户消息（UserPromptSubmit）解除，AskUserQuestion 的选项回答不解除**；scratch/记忆区与工具脚本命名不受限 |
 | 就地修改 | `sed -i`、`perl -pi`、`git commit --amend`、`git rebase`、`git filter-branch`、`git stash pop`、`patch`/`git apply` | 每类每会话提醒一次：核对模式只命中预期内容，跑后 diff 自查 |
 
-任务类型（v4）：ambient/系统消息与短续接不重置任务态；检查/审查/通读类无修改动词判**诊断**（默认零修改，首次修改性写注入诊断纪律 advisory）；关键词未命中判 unknown（首笔修改性写收中性对账）；漂移/对账/诊断**只计修改性写**——工具性/记忆/元配置写是读任务的健康探索，静默。完成断言证据门（v4B，M1）：回合末段含无对冲完成断言（修好了/绿了/is fixed…）且同轮无验证类命令→advisory 要求附证据链或改写为"预期完成，待验证"，每会话至多一次。
+任务类型（v4）：ambient/系统消息与短续接不重置任务态；检查/审查/通读类无修改动词判**诊断**（默认零修改，首次修改性写注入诊断纪律 advisory）；关键词未命中判 unknown（首笔修改性写收中性对账）；漂移/对账/诊断**只计修改性写**——工具性/记忆/元配置写是读任务的健康探索，静默。完成断言证据门（v4B，M1）：回合末段含无对冲完成断言（修好了/绿了/is fixed…）且同轮无验证类命令→advisory 要求附证据链或改写为"预期完成，待验证"，每会话至多一次。分步授权守卫（v4C）：用户指令含硬停点（"我再确认文件名""先写一下我看看风格"）或你在自己的问题文本里写下确认承诺（"文件名我组装后你再确认"）时，pendingConfirm 状态武装——问再多问题、答再多选项都不能替代这个停点，落笔前必须把组装结果给用户看一眼；对一个问题的回答只授权那一步。
 
 解析失败（变量、特殊引号、转不了的路径、git 缺失）一律放行——门禁只在"确认会丢东西"时拦，不确定不拦。
 
