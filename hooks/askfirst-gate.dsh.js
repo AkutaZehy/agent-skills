@@ -1,0 +1,662 @@
+// ask-first 开工三件套外置闸门 v4B-dsh（DSH 适配版，源: agent-skills/hooks/askfirst-gate.js v4B）。
+// 用法: node askfirst-gate.js <UserPromptSubmit|PreToolUse|PostToolUse|Stop>
+// 输入: stdin JSON（DSH claude-bridge payload: session_id/tool_name/tool_input/cwd/prompt，snake_case）。
+// 输出: exit 0 + {hookSpecificOutput:{hookEventName, additionalContext}}（advisory）；
+//       拦截时 stderr 写理由并 exit 2（DSH 语义: PreToolUse deny / Stop steer）。
+// 任何内部错误都静默 exit 0——闸门故障不得阻塞会话（git/路径/zstd 解析失败一律放行）。
+//
+// 与 ZCode v4B 源的 DSH 适配点（2026-10-04 审计定稿）：
+// D1. 工具名: DSH 工具为小写——write/edit/pwsh/ask_user_question（唯一 shell 工具是 pwsh）。
+// D2. payload: bridge 送 tool_name/tool_input/session_id/cwd（claude 风格 snake_case）。
+// D3. matcher 语义: DSH claude-code 桥的词+竖线 matcher 是字面量精确匹配（区分大小写）——
+//     v2-dsh 的 "Edit|Write" 从未命中 DSH 小写工具名，漂移闸门此前在 DSH 上是死的。
+// D4. advisory 通道: DSH 桥丢弃 PreToolUse/Stop 的 additionalContext（只吃 deny）——
+//     advisory（三件套对账/漂移/诊断/改类提醒）改在 PostToolUse 发（additionalContext 会注入上下文）；
+//     Stop 侧 M1/翻转对账用 exit 2 steer（每会话一次，steer 文本即整改要求）。
+// D5. 分区表（按 DSH 会话审计）: scratch=系统tmp + ~/.dsh 根（sessions/storages/attachments/
+//     usage-stats/.backups/.pideck/whale-*/dsh-bottom-info-bar——实测 AI 在 .dsh 根放工具脚本）；
+//     meta=~/.dsh/{skills,hooks,profiles} + AGENTS.md + hooks.json；memory=~/.zcode/cli/memories
+//     （hirame 插件两侧共享）；其余 user（含 ~/.zcode 除 memories 外——那归 ZCode 侧 hook 管）。
+// D6. ambient: DSH 桥把 runtime-context/time-context/skill-catalog/agent-instructions/
+//     user-approval/plugin 注入也送进 UserPromptSubmit，按已知头部特征识别不重置任务态。
+// D7. 会话尾读: DSH 会话文件为 ~/.dsh/sessions/<slug>/session-<id>/session.v4.jsonl.zstd，
+//     每行一个 zstd frame 追加（node zlib 只解首帧）——按 magic 扫描逐帧解压，从尾部累积到
+//     预算为止。记录: user/message(data.source.kind==='user' 为真人)、assistant/message
+//     (data.message.content: text/reasoning 块)、tool/call(data.name/arguments[JSON字串])。
+// v4 十块与 v4B(M1) 语义与 ZCode 源一致，见 agent-skills 源码头注释 a-j + M1 段。
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+const fs = require('fs');
+const zlib = require('zlib');
+const { execFileSync } = require('child_process');
+
+const EVENT = process.argv[2] || '';
+const HOME = process.env.HOME || process.env.USERPROFILE;
+const DSH_SESSIONS_DIR = process.env.ASKFIRST_DSH_SESSIONS_DIR || path.join(HOME, '.dsh', 'sessions');
+const TAIL_BYTES = 256 * 1024;
+const MEMDIR = path.join(HOME, '.zcode', 'cli', 'memories').toLowerCase();
+const DSH_ROOT = path.join(HOME, '.dsh').toLowerCase();
+const GIT_TIMEOUT = 1500;
+
+const TOOL_WRITE = new Set(['write', 'edit', 'Write', 'Edit']); // DSH 小写为主，容 ZCode 形
+const TOOL_SHELL = new Set(['pwsh', 'Bash']);
+const TOOL_ASK = new Set(['ask_user_question', 'AskUserQuestion']);
+
+const FLIP_ADV = /\bbut wait\b|\bno wait\b|\bactually wait\b|\bwait no\b|\boh wait\b|\bhold on\b|let me (?:re)?consider|let me re-?read/gi;
+const FLIP_CORE = /\b(?:wait|hmm)\b/gi;
+const FLIP_CN = /等等|其实|(?<![对不])不对(?!称)/g;
+
+const RE_ENV = /卸载|安装|装一?[个下]|配置|环境变量|报错|启动失败|排查|debug|不工作|打不开|无法启动|链接失败|link|install|火绒|代理|pnpm|npm (i|install)/i;
+const RE_PLAN = /想.{0,6}方案|方案|思路|建议|意见|想法|设计如何|怎么样|如何改进|改进空间|评审|分析|说说你的| evaluation/i;
+const RE_DIAG = /检查|审查|通读|审一遍|找.{0,3}问题|挑错|审计|体检|复核|核对|review|过一遍/i;
+const RE_MODIFY = /实现|重构|修改|改成|改一下|更新|修正|调整|补完|补充|新增|加一?[个上条组段节章项行]|删除|去掉|替换|修复|fix|refactor|移植|迁移|写一?[个条份篇章节]|发版|构建|提交|推送|生成|画|导入|导出|批量|重命名|拉取|克隆|恢复|禁用|启用|隐藏|清理|合并|拆|做个|做一个|做一下|写一下|换成|试试|帮我|顺手|改/i;
+const RE_RESEARCH = /调研|是什么|什么是|对比|评估|有哪些|看看|了解|查一下|search|为什么/i;
+const RE_CONT = /^(可以|好的|继续|ok|嗯+|哦|对|是的|行|go|yes|continue|接着|然后|没问题|收到|按|执行|就这样|可以了|修|发|暂停|先这样|收工|等等)/i;
+// D6: DSH 桥的 ambient/注入流量头部特征（会话审计: user-approval/runtime-context/time-context/
+// skill-catalog/agent-instructions/plugin:meow-memory，均以固定前缀进入 prompt）。
+const AMBIENT_RE = /^\s*(<system-reminder|Current runtime context|Time sampled while|The approval policy changed|Memory \(dsh-|\[meow-memory|A skill is a reusable|The following workspace instructions)/i;
+
+function readState(sid) {
+  try { return JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${sid}.json`), 'utf8')); }
+  catch { return null; }
+}
+function writeState(sid, st) {
+  try { fs.writeFileSync(path.join(os.tmpdir(), `zcode-askfirst-${sid}.json`), JSON.stringify(st)); } catch {}
+}
+function stripEnvelope(s) {
+  return String(s || '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();
+}
+function isAmbient(raw) {
+  const s = String(raw || '');
+  return AMBIENT_RE.test(s) || /<system-reminder>\s*\[SYSTEM NOTIFICATION/i.test(s);
+}
+function classify(p) {
+  if (RE_ENV.test(p)) return '环境';
+  if (RE_DIAG.test(p) && !RE_MODIFY.test(p)) return '诊断';
+  if (RE_PLAN.test(p)) return '读';
+  if (RE_MODIFY.test(p)) return '改';
+  if (RE_RESEARCH.test(p)) return '检索';
+  return 'unknown';
+}
+function countFlips(text) {
+  if (!text) return 0;
+  let n = 0;
+  const rest = text.replace(FLIP_ADV, '');
+  n += (text.match(FLIP_ADV) || []).length;
+  n += (rest.match(FLIP_CORE) || []).length;
+  n += (rest.match(FLIP_CN) || []).length;
+  return n;
+}
+function emit(eventName, additionalContext) {
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: eventName, additionalContext } }));
+}
+function deny(msg) {
+  process.stderr.write(msg + '\n');
+  process.exit(2);
+}
+
+// ── 分区与路径守卫（v4 h/j/f 共用机械，DSH 分区表见头注 D5） ──────────
+function normWin(p) { return String(p || '').replace(/\//g, '\\').toLowerCase(); }
+function zoneOf(p) {
+  if (!p) return 'unknown';
+  const lp = normWin(p);
+  const tmp = normWin(os.tmpdir());
+  if (lp === tmp || lp.startsWith(tmp + '\\')) return 'scratch';
+  if (lp === DSH_ROOT || lp.startsWith(DSH_ROOT + '\\')) {
+    if (/\\.dsh\\(skills|hooks|profiles)\\/.test(lp)) return 'meta';
+    if (lp === path.join(DSH_ROOT, 'agents.md') || lp === path.join(DSH_ROOT, 'hooks.json')) return 'meta';
+    return 'scratch'; // .dsh 根: sessions/storages/attachments/usage-stats/.backups/临时脚本
+  }
+  if (lp === MEMDIR || lp.startsWith(MEMDIR + '\\')) return 'memory';
+  return 'user';
+}
+function gitRootOf(p) {
+  try {
+    const out = execFileSync('git', ['-C', path.dirname(p), 'rev-parse', '--show-toplevel'], { timeout: GIT_TIMEOUT, stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf8' });
+    return out.trim();
+  } catch { return null; }
+}
+function gitTracked(p, root) {
+  try {
+    execFileSync('git', ['-C', root, 'ls-files', '--error-unmatch', path.relative(root, p)], { timeout: GIT_TIMEOUT, stdio: 'ignore' });
+    return true;
+  } catch { return false; }
+}
+// 路径守卫核心：返回 deny 理由或 null（放行）。op: write|rm|rmdir——write 对新建文件记为 AI 创建。
+function pathGuard(st, w, op) {
+  const zone = zoneOf(w);
+  if (zone === 'scratch' || zone === 'memory' || zone === 'unknown') return null;
+  const key = normWin(w);
+  st.created = st.created || [];
+  st.confirmed = st.confirmed || {};
+  const token = crypto.createHash('md5').update('pg:' + op + ':' + key).digest('hex').slice(0, 12);
+  if (st.confirmed[token] || st.created.includes(key)) return null;
+  if (!fs.existsSync(w)) { // 新建：AI 正在创建，无内容可丢
+    if (op === 'write') st.created.push(key);
+    return null;
+  }
+  const root = gitRootOf(w);
+  if (root) {
+    if (gitTracked(w, root)) return null; // git 可回滚
+    if (op === 'rmdir') {
+      try {
+        const por = execFileSync('git', ['-C', root, 'status', '--porcelain', '--', path.relative(root, w)], { timeout: GIT_TIMEOUT, encoding: 'utf8' });
+        if (!String(por).trim()) return null; // 目录内全干净，删了也能 checkout 回来
+      } catch { return null; }
+    }
+  }
+  st.confirmed[token] = Date.now();
+  const zoneLabel = root ? 'git 仓库内未被追踪的既有文件' : '无版本管理的目录';
+  return `[ask-first 路径守卫] 目标位于${zoneLabel}，改/删后不可回滚：${w}\n先核对路径拼写（大小写/相近目录名），cat/ls 看一眼内容确认没找错目标；确认后重跑同一操作即放行。`;
+}
+// 写行为分类（漂移/诊断/对账只计 'mod'）
+const SCRATCH_BASENAME = /(?:^|[_\-.])(test|spec|check|plot|demo|smoke|debug|extract|analyze|analyse|audit|scratch|tmp|temp|verify|parity|build)[\w.\-]*\.(?:js|mjs|cjs|py|ts|sh|ps1|bat)$/i;
+function writeKind(toolName, w) {
+  const zone = zoneOf(w);
+  if (zone === 'scratch') return 'tool';
+  if (zone === 'memory') return 'mem';
+  if (zone === 'meta') return 'meta';
+  if (toolName === 'write' || toolName === 'Write') { // 新建文件用命名启发；edit 改既有文件天然修改性
+    const bn = path.basename(normWin(w));
+    if (SCRATCH_BASENAME.test(bn)) return 'tool';
+  }
+  return 'mod';
+}
+
+const TRIO_MSG = (type) =>
+  `[开工三件套] 本任务分类=${type}。动手前在交付说明开头给出：①类型与对象；②Done when（完成口径）；③一次 ask_user_question 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B、范围、术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
+
+const DIAG_TRIO_MSG =
+  `[开工三件套·诊断] 本任务分类=诊断（检查/审查/通读找问题）。①类型与对象；②Done when；③一次 ask_user_question 反问批次（≤4题，锚定口径确认与真实分叉；grep 能答的先自查），若无真分叉写明"无分叉"后开工。诊断任务默认零修改：发现问题时先报告并给修复选项，等用户点头或本轮已明示可修再动。`;
+
+const DIAG_MSG =
+  `[诊断纪律] 本任务为诊断/审查，刚才的写入属于修改性操作。默认零修改：要修复先给选项征得同意（或用户本轮已明示可修后继续）；本次已记录，站会审计可见。`;
+
+const UNKNOWN_MSG =
+  `[三件套对账] 本任务开工时类型未明（unknown），现在首次落笔修改。把类型更正为"读并改"并补全三件套声明（类型/Done when/反问批次），确无分叉则写明"无分叉"后继续；本次已记录。`;
+
+const DRIFT_MSG =
+  `[类型漂移·留痕] 本任务声明为读/检索，现在落笔修改。把类型更正为"读并改"，声明"无新分叉"或补一次反问批次（锚定 done-when 口径与真实分叉；grep 能答的先自查）。本次漂移已记录（driftCount+1，站会审计可见）。`;
+
+const GATE_MSG =
+  `[三件套对账] 本任务尚未见反问批次。落笔前发一次 ask_user_question（锚定 done-when 口径与真实分叉），或在回复开头补全三件套声明；若确无分叉，写明"无分叉"后继续。`;
+
+const FLIP_MSG = (n) =>
+  `[ask-first 对账] 最新思考段检测到 ${n} 个翻转信号且本任务未反问：对真实分叉发一次 ask_user_question，或写明为何无需问后收尾。`;
+
+// v4B (M1) 完成断言证据门：窄口径完成词 + 近旁对冲排除 + 同轮验证命令豁免
+const DONE_RE = /修好了|搞定了|弄好了|已修复|完成[了。]|测试(全部)?通过|绿了|问题解决|已解决|可以用了|能用了|should (now )?work|works now|is fixed|all (tests )?pass|fixed\./gi;
+const HEDGE_NEAR = /可能|或许|也许|不一定|不确定|试试看|might|maybe|possibly|perhaps|not sure/i;
+const VERIFY_RE = /(npm|pnpm|yarn)\s+(test|run\s+test|run\s+build)|pytest|python\s+-m\s+pytest|node\s+--test|vitest|\bjest\b|\btsc\b|cargo\s+test|\bgo\s+test\b|make\s+(test|check)|\bnode\s+[^\s&|;]*(test|verify|check|smoke)[^\s&|;]*\.(js|mjs|cjs|py)\b/i;
+const M1_MSG = (w) =>
+  `[M1 完成断言证据门] 本轮收尾含完成断言（命中：${w}）。完成态表述需附证据链之一：①背书的测试/命令及其实际结果；②构建产物或实测输出引用。无法实证的部分改写为"预期完成，待验证"。（同轮已含验证命令的回合不触发；每会话至多一次）`;
+
+// ── pwsh/Bash 门禁（v4B + PowerShell 别名） ────────────────────
+const EXTERNAL_HEADS = [
+  [/^git$/, /^push$/],
+  [/^npm$/, /^(publish|unpublish)$/],
+  [/^gh$/, /^repo$/, /^delete$/],
+  [/^gh$/, /^(release|workflow-dispatch)$/, /^(create|delete|upload)$/],
+];
+const GH_API_WRITE = /gh\s+api\b.*\s-X\s*(DELETE|POST|PUT|PATCH)\b/i;
+const REMIND_HEADS = new Set(['sed', 'perl', 'patch', 'apply']);
+const SCRIPT_EXEC_RE = /(?:^|[\s&|;])(?:node|python3?|npx|ts-node|bash|sh)\s+"?([^\s&|;"]+\.(?:js|mjs|cjs|py|ts|sh))"?/g;
+const SCRIPT_DANGER = /rmSync\s*\(|rmtree|unlinkSync\s*\(|os\.remove|shutil\.|\brm\s+-|sed\s+-[a-z]*i|git\s+push|npm\s+publish|gh\s+release|Remove-Item|remove-item/;
+const PS_RM = new Set(['remove-item', 'rm', 'del', 'erase', 'ri', 'rd', 'unlink', 'shred']);
+const PS_CP = new Set(['copy-item', 'cp', 'copy', 'ci']);
+const PS_MV = new Set(['move-item', 'mv', 'move', 'mi']);
+const PS_SETCONTENT = new Set(['set-content', 'sc', 'add-content', 'out-file']);
+
+function splitSegments(cmd) {
+  const segs = [];
+  let cur = '', q = '';
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (q) { cur += c; if (c === q) q = ''; continue; }
+    if (c === "'" || c === '"') { q = c; cur += c; continue; }
+    if (c === '&' && cmd[i + 1] === '&' || c === '|' && cmd[i + 1] === '|' || c === ';' || c === '|' || c === '\n' || c === '\r') { segs.push(cur); cur = ''; if (c === '&' || c === '|') i++; continue; }
+    cur += c;
+  }
+  segs.push(cur);
+  return segs.map((s) => s.trim()).filter(Boolean);
+}
+function tokenize(seg) {
+  const toks = [];
+  let cur = '', q = '';
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i];
+    if (q) { if (c === q) { q = ''; toks.push(cur); cur = ''; } else cur += c; continue; }
+    if (c === "'" || c === '"') { q = c; continue; }
+    if (/\s/.test(c)) { if (cur) { toks.push(cur); cur = ''; } continue; }
+    cur += c;
+  }
+  if (cur) toks.push(cur);
+  return toks;
+}
+function cmdHead(toks) {
+  let i = 0;
+  while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
+  if (i < toks.length && /^(sudo|command|nohup|env)$/i.test(toks[i])) i++;
+  const h = toks[i] || '';
+  return { head: h.split('/').pop().replace(/\.exe$/i, '').toLowerCase(), rest: toks.slice(i + 1) };
+}
+// PS 常量变量展开（$env:TEMP 等）——只展开已知项，其余 fail-open
+function expandVars(p) {
+  if (!p || typeof p !== 'string') return p;
+  return p
+    .replace(/\$env:temp\b/gi, os.tmpdir())
+    .replace(/\$env:tmp\b/gi, os.tmpdir())
+    .replace(/\$env:userprofile\b/gi, HOME)
+    .replace(/\$env:home\b/gi, HOME)
+    .replace(/\$env:localappdata\b/gi, path.join(HOME, 'AppData', 'Local'));
+}
+function toWinPath(p, cwd) {
+  if (!p || /\$/.test(p)) { p = expandVars(p); if (!p || /\$/.test(p)) return null; }
+  p = p.replace(/^["']|["']$/g, '');
+  p = p.replace(/[^\\]+[\\/]$/, '');
+  if (p === '~') return HOME;
+  if (p.startsWith('~/') || p.startsWith('~\\')) p = path.join(HOME, p.slice(2));
+  const m = /^\/([a-zA-Z])\/(.*)$/.exec(p);
+  if (m) return `${m[1].toUpperCase()}:\\${m[2]}`;
+  if (/^\/tmp\b/.test(p)) p = path.join(os.tmpdir(), p.slice(4));
+  if (/^\/dev\b/.test(p)) return null;
+  if (/^[a-zA-Z]:[\\/]/.test(p)) return p;
+  if (path.isAbsolute(p)) return null;
+  return path.resolve(cwd || process.cwd(), p);
+}
+const exists = (p) => { try { return p != null && fs.existsSync(p); } catch { return false; } };
+const isDir = (p) => { try { return p != null && fs.statSync(p).isDirectory(); } catch { return false; } };
+const nonEmpty = (p) => { try { return p != null && fs.statSync(p).isDirectory() && fs.readdirSync(p).length > 0; } catch { return false; } };
+
+function redirectTargets(seg) {
+  const out = [];
+  const re = /(?<![0-9<>>])>\s*([^\s&|;<>]+)/g;
+  let m;
+  while ((m = re.exec(seg))) out.push(m[1]);
+  return out;
+}
+// 脚本内容扫描（v4 i）：scratch 区脚本执行前扫内容
+function scriptScan(st, cmd, cwd) {
+  SCRIPT_EXEC_RE.lastIndex = 0;
+  let m;
+  while ((m = SCRIPT_EXEC_RE.exec(cmd))) {
+    const w = toWinPath(m[1], cwd);
+    if (!w || zoneOf(w) !== 'scratch') continue;
+    let src = '';
+    try { src = fs.readFileSync(w, 'utf8'); } catch { continue; }
+    if (SCRIPT_DANGER.test(src)) {
+      st.confirmed = st.confirmed || {};
+      const token = crypto.createHash('md5').update('scan:' + normWin(w)).digest('hex').slice(0, 12);
+      if (!st.confirmed[token]) {
+        st.confirmed[token] = Date.now();
+        return `[ask-first 脚本内容扫描] ${path.basename(w)} 位于脚本区，但内容含破坏性调用（rm/rmSync/sed -i/git push 等）。核对其目标路径（尤其是否指向用户资产与拼写）后，重跑同一命令即放行。`;
+      }
+    }
+  }
+  return null;
+}
+
+function onBashGate(input, sid) {
+  const ti = input.tool_input || input.toolInput || {};
+  const cmd = ti.command || '';
+  if (!cmd) return;
+  const st = readState(sid) || {};
+  st.confirmed = st.confirmed || {};
+  st.reminded = st.reminded || {};
+  const cwd0 = ti.workdir || input.cwd || process.cwd();
+  const token = crypto.createHash('md5').update(cmd).digest('hex').slice(0, 12);
+
+  // v4 i: 脚本内容扫描（先于分段循环，整命令维度）
+  const scanMsg = scriptScan(st, cmd, cwd0);
+  if (scanMsg) { writeState(sid, st); deny(scanMsg); }
+
+  let verdict = null;
+  let remind = null;
+  let cwd = cwd0;
+
+  for (const seg of splitSegments(cmd)) {
+    const toks = tokenize(seg);
+    const { head, rest } = cmdHead(toks);
+    const flags = rest.filter((t) => t.startsWith('-')).join(' ');
+    const args = rest.filter((t) => !t.startsWith('-') || /^(\/d|\/s)$/i.test(t));
+    // PS 参数取值：-Destination/-Path/-FilePath <v> 也算位置参数来源
+    const optVal = (names) => { for (let i = 0; i < rest.length - 1; i++) { if (names.some((n) => rest[i].toLowerCase() === n || rest[i].toLowerCase().startsWith(n + ':'))) return rest[i + 1]; } return null; };
+
+    if (head === 'cd' || head === 'set-location') { const w = toWinPath((rest[0] || '').replace(/--$/, ''), cwd); if (w) cwd = w; continue; }
+    if (/dry-run|^n$/.test(flags.replace(/^-+/, '')) || /(^|\s)(--dry-run)(\s|$)/.test(seg) || /-whatif\b/i.test(flags)) continue;
+
+    // 外发类（不变）
+    for (const pat of EXTERNAL_HEADS) {
+      if (pat.every((re, i) => re.test([head, ...rest][i] || ''))) {
+        verdict = { kind: 'external', msg: `[ask-first 外发门禁] 检出对外发布/不可逆外发（${[head, ...rest].slice(0, pat.length).join(' ')}）。按 AGENTS.md 先经用户确认（ask_user_question 批次或用户明示/亲手执行），确认后重跑同一命令即放行。` };
+      }
+    }
+    if (GH_API_WRITE.test(seg)) {
+      verdict = { kind: 'external', msg: `[ask-first 外发门禁] 检出 gh api 写操作（-X DELETE/POST/PUT/PATCH）。先经用户确认，确认后重跑同一命令即放行。` };
+    }
+    if (verdict) break;
+
+    // git 状态覆盖类（不变）
+    if (head === 'git' && (rest[0] === 'reset' && /--hard/.test(flags) ||
+        rest[0] === 'checkout' && (rest[1] === '--' || rest[1] === '-- ') ||
+        rest[0] === 'restore' || rest[0] === 'clean' ||
+        rest[0] === 'stash' && /^(drop|pop|clear)$/.test(rest[1] || '') ||
+        rest[0] === 'branch' && /^-[Dd]$/.test(rest[1] || '') && /D/.test(rest[1]) ||
+        rest[0] === 'tag' && /^-d$/.test(rest[1] || ''))) {
+      verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] git 状态覆盖命令（git ${rest[0]}）会丢弃未提交改动/引用。先 git status 看清会失去什么，确认后重跑同一命令即放行。` };
+      break;
+    }
+
+    // 变更类：v4 j/h —— scratch/记忆区豁免；用户区走路径守卫
+    const guarded = (p, op) => {
+      const w = toWinPath(p, cwd);
+      if (!w) return null;
+      const zone = zoneOf(w);
+      if (zone === 'scratch' || zone === 'memory' || zone === 'unknown') return null;
+      if (!exists(w)) return null; // 不存在的目标没有可丢内容
+      const msg = pathGuard(st, w, op);
+      return msg ? { kind: 'mutate', msg } : null;
+    };
+    const lastPath = () => args[args.length - 1];
+    if (PS_RM.has(head) || (head === 'git' && rest[0] === 'rm')) {
+      for (const a of args.slice(head === 'git' ? 1 : 0)) {
+        if (a.includes('*') || a.includes('?')) continue;
+        const w = toWinPath(a, cwd);
+        if (!w || zoneOf(w) === 'scratch' || zoneOf(w) === 'memory') continue;
+        if (!exists(w)) continue;
+        if (isDir(w)) { const g = pathGuard(st, w, 'rmdir'); if (g) { verdict = { kind: 'mutate', msg: g }; break; } continue; }
+        const g = pathGuard(st, w, 'rm');
+        if (g) { verdict = { kind: 'mutate', msg: g }; break; }
+      }
+    } else if (PS_CP.has(head) || PS_MV.has(head) || head === 'install' || head === 'rsync' || (head === 'git' && rest[0] === 'mv')) {
+      const dest = optVal(['-destination']) || lastPath();
+      const g = guarded(dest, 'write');
+      if (g) verdict = g;
+    } else if (head === 'tee' || head === 'tee-object' || head === 'dd') {
+      const t = head === 'dd' ? (rest.find((x) => x.startsWith('of=')) || '').slice(3) : (optVal(['-filepath']) || lastPath());
+      const g = guarded(t, 'write');
+      if (g) verdict = g;
+    } else if (PS_SETCONTENT.has(head)) {
+      const t = optVal(['-path', '-filepath']) || lastPath();
+      const g = guarded(t, 'write');
+      if (g) verdict = g;
+    } else if (head === 'curl' || head === 'wget') {
+      const f = head === 'curl' ? (rest[rest.indexOf('-o') + 1] || '') : (rest[rest.indexOf('-O') + 1] || '');
+      const g = guarded(f, 'write');
+      if (g) verdict = g;
+    } else if (head === 'tar' && /(^|\s)-[a-zA-Z]*x/.test(seg)) {
+      const cIdx = rest.indexOf('-C');
+      const dir = cIdx >= 0 ? toWinPath(rest[cIdx + 1], cwd) : cwd;
+      if (dir && nonEmpty(dir) && zoneOf(dir) === 'user') {
+        const g = pathGuard(st, dir, 'rmdir');
+        if (g) verdict = { kind: 'mutate', msg: g };
+        else if (!gitRootOf(dir)) verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] tar 解包目标目录非空且无版本管理，可能覆盖同名文件（${cIdx >= 0 ? rest[cIdx + 1] : '当前目录'}）。先看目录内容再重跑同一命令即放行。` };
+      }
+    } else if (head === 'unzip' && /(^|\s)-[a-zA-Z]*o/.test(seg)) {
+      const dIdx = rest.indexOf('-d');
+      const dir = dIdx >= 0 ? toWinPath(rest[dIdx + 1], cwd) : cwd;
+      if (dir && nonEmpty(dir) && zoneOf(dir) === 'user' && !gitRootOf(dir)) {
+        verdict = { kind: 'mutate', msg: `[ask-first 变更门禁] unzip -o 目标目录非空且无版本管理，可能覆盖同名文件。先看目录内容再重跑同一命令即放行。` };
+      }
+    }
+    if (verdict) break;
+
+    // 重定向（v4 j: scratch/记忆区豁免；用户区走路径守卫）
+    for (const t of redirectTargets(seg)) {
+      const w = toWinPath(t, cwd);
+      if (!w || zoneOf(w) === 'scratch' || zoneOf(w) === 'memory' || zoneOf(w) === 'unknown') continue;
+      if (!exists(w)) continue;
+      const g = pathGuard(st, w, 'write');
+      if (g) { verdict = { kind: 'mutate', msg: g }; break; }
+    }
+    if (verdict) break;
+
+    // 改类提醒（每类每会话一次，不变）
+    const isRemind =
+      (head === 'sed' && /(^|\s)-[a-zA-Z]*i/.test(seg)) ||
+      (head === 'perl' && /(^|\s)-pi|^".*-pi/.test(seg)) ||
+      (head === 'git' && (rest[0] === 'commit' && /--amend/.test(flags) || rest[0] === 'rebase' || rest[0] === 'filter-branch')) ||
+      (head === 'git' && rest[0] === 'stash' && rest[1] === 'pop') ||
+      REMIND_HEADS.has(head) && head !== 'apply';
+    const remindKey = head === 'git' ? `git-${rest[0]}` : head;
+    if (isRemind && !st.reminded[remindKey]) {
+      st.reminded[remindKey] = true;
+      remind = `[ask-first 改类提醒] ${remindKey.replace(/^git-/, 'git ')} 为就地修改：核对模式只命中预期内容（警惕过宽正则与大面积替换），跑后 diff 自查一次。`;
+    }
+  }
+
+  if (verdict) {
+    if (st.confirmed[token]) { writeState(sid, st); return; } // 看过/确认过的同一命令，放行
+    st.confirmed[token] = Date.now();
+    writeState(sid, st);
+    deny(verdict.msg);
+  }
+  writeState(sid, st);
+}
+
+// ── advisory（D4: PostToolUse 发，DSH 桥会注入 additionalContext） ──
+function onAdvisory(input) {
+  const sid = input.session_id || input.sessionId || 'unknown';
+  const tool = input.tool_name || input.toolName || '';
+  const ti = input.tool_input || input.toolInput || {};
+  if (TOOL_SHELL.has(tool)) {
+    // 改类提醒（sed -i 等）放这里：执行后提醒 diff 自查
+    const st = readState(sid) || { reminded: {} };
+    st.reminded = st.reminded || {};
+    const seg = splitSegments(ti.command || '')[0] || '';
+    const toks = tokenize(seg);
+    const { head, rest } = cmdHead(toks);
+    const flags = rest.filter((t) => t.startsWith('-')).join(' ');
+    const isRemind =
+      (head === 'sed' && /(^|\s)-[a-zA-Z]*i/.test(seg)) ||
+      (head === 'perl' && /(^|\s)-pi|^".*-pi/.test(seg)) ||
+      (head === 'git' && (rest[0] === 'commit' && /--amend/.test(flags) || rest[0] === 'rebase' || rest[0] === 'filter-branch')) ||
+      (head === 'git' && rest[0] === 'stash' && rest[1] === 'pop') ||
+      (REMIND_HEADS.has(head) && head !== 'apply');
+    const remindKey = head === 'git' ? `git-${rest[0]}` : head;
+    if (isRemind && !st.reminded[remindKey]) {
+      st.reminded[remindKey] = true;
+      writeState(sid, st);
+      emit(EVENT, `[ask-first 改类提醒] ${remindKey.replace(/^git-/, 'git ')} 为就地修改：核对模式只命中预期内容（警惕过宽正则与大面积替换），跑后 diff 自查一次。`);
+    } else writeState(sid, st);
+    return;
+  }
+  if (!TOOL_WRITE.has(tool)) return;
+  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
+  const fp = ti.file_path || ti.path || ti.notebook_path || '';
+  const w = fp ? toWinPath(fp, input.cwd) : null;
+  // v4 f: 漂移/对账/诊断只计修改性写
+  const kind = w ? writeKind(tool, w) : 'mod';
+  if (kind !== 'mod') { writeState(sid, st); return; }
+  if (st.type === '改' || st.type === '环境') {
+    if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit(EVENT, GATE_MSG); return; }
+  } else if (st.type === '诊断') {
+    if (!st.diagNotified) { st.diagNotified = true; writeState(sid, st); emit(EVENT, DIAG_MSG); return; }
+  } else if (st.type === 'unknown') {
+    if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit(EVENT, UNKNOWN_MSG); return; }
+  } else if (!st.driftNotified) {
+    st.driftNotified = true;
+    st.driftCount = (st.driftCount || 0) + 1;
+    writeState(sid, st);
+    emit(EVENT, DRIFT_MSG);
+    return;
+  }
+  writeState(sid, st);
+}
+
+function onUserPromptSubmit(input) {
+  const sid = input.session_id || input.sessionId || 'unknown';
+  const raw = input.prompt || '';
+  if (isAmbient(raw)) { // v4 a + D6: 不重分类不重置，只续时
+    const st = readState(sid);
+    if (st) { st.ts = Date.now(); writeState(sid, st); }
+    return;
+  }
+  const p = stripEnvelope(raw);
+  if (!p) return;
+  if (p.length < 30 && RE_CONT.test(p)) { // v4 b: 纯 CJK 续接可命中
+    const st = readState(sid);
+    if (st) { st.ts = Date.now(); writeState(sid, st); }
+    return;
+  }
+  const prev = readState(sid) || {};
+  const type = classify(p);
+  writeState(sid, {
+    taskKey: crypto.createHash('md5').update(p.slice(0, 500)).digest('hex').slice(0, 8),
+    type, gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false,
+    driftCount: 0, driftOutcome: null, doneGate: false,
+    created: prev.created || [], confirmed: prev.confirmed || {}, reminded: prev.reminded || {},
+    ts: Date.now(),
+  });
+  if (type === '改' || type === '环境') emit(EVENT, TRIO_MSG(type));
+  else if (type === '诊断') emit(EVENT, DIAG_TRIO_MSG);
+}
+
+function onPreToolUse(input) {
+  const sid = input.session_id || input.sessionId || 'unknown';
+  const tool = input.tool_name || input.toolName || '';
+  if (TOOL_ASK.has(tool)) {
+    const st = readState(sid) || { gateAsked: true, ts: Date.now() };
+    st.gateAsked = true; writeState(sid, st);
+    return;
+  }
+  if (TOOL_SHELL.has(tool)) { try { onBashGate(input, sid); } catch {} return; }
+  if (!TOOL_WRITE.has(tool)) return;
+  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
+  const ti = input.tool_input || input.toolInput || {};
+  const fp = ti.file_path || ti.path || ti.notebook_path || '';
+  const w = fp ? toWinPath(fp, input.cwd) : null;
+
+  // v4 h: 路径守卫（写/改）——PreToolUse 硬拦
+  if (w) {
+    const g = pathGuard(st, w, 'write');
+    if (g) { writeState(sid, st); deny(g); }
+  }
+  writeState(sid, st);
+}
+
+// ── D7: DSH 会话尾读 ──────────────────────────────────────────
+function findSessionFile(sid) {
+  try {
+    const uuid = String(sid).replace(/^session-/, '');
+    for (const slug of fs.readdirSync(DSH_SESSIONS_DIR, { withFileTypes: true })) {
+      if (!slug.isDirectory()) continue;
+      const slugDir = path.join(DSH_SESSIONS_DIR, slug.name);
+      for (const sub of fs.readdirSync(slugDir, { withFileTypes: true })) {
+        if (!sub.isDirectory()) continue;
+        if (sub.name !== uuid && sub.name !== 'session-' + uuid && !sub.name.endsWith(uuid)) continue;
+        for (const f of ['session.v4.jsonl.zstd', 'session.v4.jsonl', 'session.jsonl.zstd', 'session.jsonl']) {
+          const p = path.join(slugDir, sub.name, f);
+          if (fs.existsSync(p)) return p;
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+// 每行一个 zstd frame 的尾读：magic 扫描找 frame 边界，从尾部逐帧解压累积到预算。
+// 注：magic 字节串理论上可能出现在压缩数据内造成假边界→该帧解压失败被跳过（只影响审计特征，fail-open）。
+function readSessionTail(file, budget) {
+  const buf = fs.readFileSync(file);
+  if (buf.length < 4 || !(buf[0] === 0x28 && buf[1] === 0xB5 && buf[2] === 0x2F && buf[3] === 0xFD)) {
+    // 未压缩 JSONL：直接取尾部
+    const start = Math.max(0, buf.length - budget);
+    return buf.subarray(start).toString('utf8');
+  }
+  if (typeof zlib.zstdDecompressSync !== 'function') return '';
+  const offs = [];
+  for (let i = 0; i + 4 <= buf.length; i++) {
+    if (buf[i] === 0x28 && buf[i + 1] === 0xB5 && buf[i + 2] === 0x2F && buf[i + 3] === 0xFD) offs.push(i);
+  }
+  const parts = [];
+  let acc = 0;
+  for (let j = offs.length - 1; j >= 0 && acc < budget; j--) {
+    const end = j + 1 < offs.length ? offs[j + 1] : buf.length;
+    try { const t = zlib.zstdDecompressSync(buf.subarray(offs[j], end)).toString('utf8'); parts.push(t); acc += t.length; }
+    catch {}
+  }
+  return parts.reverse().join('');
+}
+
+function onStop(input) {
+  const sid = input.session_id || input.sessionId || 'unknown';
+  const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, doneGate: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
+  const file = findSessionFile(sid);
+  if (!file) return;
+  let text;
+  try { text = readSessionTail(file, TAIL_BYTES); } catch { return; }
+  // 单次解析双用：翻转对账(v2-) + M1 完成断言(v4B)
+  const segs = []; let asks = 0;
+  const texts = []; const turnBash = [];
+  let userSeq = -1; // 真人用户边界：最后一条 source.kind==='user' 的 user/message
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let rec; try { rec = JSON.parse(line); } catch { continue; }
+    const seq = typeof rec.seq === 'number' ? rec.seq : 0;
+    if (rec.type === 'user/message') {
+      const src = rec.data && rec.data.source;
+      if (src && src.kind === 'user') userSeq = seq;
+      continue;
+    }
+    if (rec.type === 'tool/call') {
+      const nm = (rec.data && rec.data.name) || '';
+      if (TOOL_ASK.has(nm)) asks++;
+      if (TOOL_SHELL.has(nm) && seq > userSeq) {
+        let a = rec.data.arguments;
+        if (typeof a === 'string') { try { a = JSON.parse(a); } catch { a = null; } }
+        const cmd = (a && typeof a === 'object' && a.command) || '';
+        if (cmd) turnBash.push(cmd);
+      }
+      continue;
+    }
+    if (rec.type === 'assistant/message') {
+      const content = rec.data && rec.data.message && rec.data.message.content;
+      if (!Array.isArray(content)) continue;
+      for (const b of content) {
+        if (b.type === 'text' && b.text) texts.push({ seq, t: b.text });
+        if (b.type === 'reasoning' && typeof b.text === 'string' && b.text.length > 50) segs.push(b.text);
+      }
+    }
+  }
+  // v4B M1：末段完成断言（剥代码块；对冲近旁排除；同轮验证豁免；每会话一次）
+  if (!st.doneGate && texts.length) {
+    const inTurn = texts.filter((x) => userSeq < 0 || x.seq > userSeq);
+    const finalText = (inTurn.length ? inTurn[inTurn.length - 1] : texts[texts.length - 1]).t;
+    const clean = String(finalText).replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ');
+    let m, hit = null;
+    DONE_RE.lastIndex = 0;
+    while ((m = DONE_RE.exec(clean))) {
+      const around = clean.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40);
+      if (!HEDGE_NEAR.test(around)) { hit = m[0]; break; }
+    }
+    const verified = turnBash.some((c) => VERIFY_RE.test(c));
+    if (hit && !verified) {
+      st.doneGate = true; writeState(sid, st);
+      deny(M1_MSG(hit)); // D4: Stop 侧 additionalContext 被桥丢弃，用 exit 2 steer 达成"补证据"
+    }
+  }
+  // 翻转对账（v2- 原逻辑，同样 steer）
+  if (st.flipsNotified) return;
+  if (asks > 0 || segs.length === 0) return;
+  const last = countFlips(segs[segs.length - 1]);
+  const prev = countFlips(segs[segs.length - 2] || '');
+  if (last >= 5 || (last >= 3 && prev >= 3)) {
+    st.flipsNotified = true; writeState(sid, st);
+    deny(FLIP_MSG(last));
+  }
+}
+
+(async () => {
+  let raw = '';
+  for await (const chunk of process.stdin) raw += chunk;
+  let input = {};
+  try { input = JSON.parse(raw); } catch {}
+  try {
+    if (EVENT === 'UserPromptSubmit') onUserPromptSubmit(input);
+    else if (EVENT === 'PreToolUse') onPreToolUse(input);
+    else if (EVENT === 'PostToolUse') onAdvisory(input);
+    else if (EVENT === 'Stop') onStop(input);
+  } catch {}
+  process.exit(0);
+})();

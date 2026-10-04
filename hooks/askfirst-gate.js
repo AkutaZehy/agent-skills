@@ -150,7 +150,7 @@ function writeKind(toolName, w) {
   if (zone === 'scratch') return 'tool';
   if (zone === 'memory') return 'mem';
   if (zone === 'meta') return 'meta';
-  if (toolName === 'Write') { // 新建文件用命名启发；Edit 改既有文件天然修改性
+  if (toolName === 'write' || toolName === 'Write') { // 新建文件用命名启发；edit 改既有文件天然修改性
     const bn = path.basename(normWin(w));
     if (SCRATCH_BASENAME.test(bn)) return 'tool';
   }
@@ -158,7 +158,7 @@ function writeKind(toolName, w) {
 }
 
 const TRIO_MSG = (type) =>
-  `[开工三件套] 本任务分类=${type}。动手前在交付说明开头给出：①类型与对象；②Done when（完成口径）；③一次 AskUserQuestion 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B/范围/术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
+  `[开工三件套] 本任务分类=${type}。动手前在交付说明开头给出：①类型与对象；②Done when（完成口径）；③一次 AskUserQuestion 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B、范围、术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
 
 const DIAG_TRIO_MSG =
   `[开工三件套·诊断] 本任务分类=诊断（检查/审查/通读找问题）。①类型与对象；②Done when；③一次 AskUserQuestion 反问批次（≤4题，锚定口径确认与真实分叉；grep 能答的先自查），若无真分叉写明"无分叉"后开工。诊断任务默认零修改：发现问题时先报告并给修复选项，等用户点头或本轮已明示可修再动。`;
@@ -195,7 +195,11 @@ const EXTERNAL_HEADS = [
 const GH_API_WRITE = /gh\s+api\b.*\s-X\s*(DELETE|POST|PUT|PATCH)\b/i;
 const REMIND_HEADS = new Set(['sed', 'perl', 'patch', 'apply']);
 const SCRIPT_EXEC_RE = /(?:^|[\s&|;])(?:node|python3?|npx|ts-node|bash|sh)\s+"?([^\s&|;"]+\.(?:js|mjs|cjs|py|ts|sh))"?/g;
-const SCRIPT_DANGER = /rmSync\s*\(|rmtree|unlinkSync\s*\(|os\.remove|shutil\.|\brm\s+-|sed\s+-[a-z]*i|git\s+push|npm\s+publish|gh\s+release/;
+const SCRIPT_DANGER = /rmSync\s*\(|rmtree|unlinkSync\s*\(|os\.remove|shutil\.|\brm\s+-|sed\s+-[a-z]*i|git\s+push|npm\s+publish|gh\s+release|Remove-Item|remove-item/;
+const PS_RM = new Set(['remove-item', 'rm', 'del', 'erase', 'ri', 'rd', 'unlink', 'shred']);
+const PS_CP = new Set(['copy-item', 'cp', 'copy', 'ci']);
+const PS_MV = new Set(['move-item', 'mv', 'move', 'mi']);
+const PS_SETCONTENT = new Set(['set-content', 'sc', 'add-content', 'out-file']);
 
 function splitSegments(cmd) {
   const segs = [];
@@ -204,7 +208,7 @@ function splitSegments(cmd) {
     const c = cmd[i];
     if (q) { cur += c; if (c === q) q = ''; continue; }
     if (c === "'" || c === '"') { q = c; cur += c; continue; }
-    if (c === '&' && cmd[i + 1] === '&' || c === '|' && cmd[i + 1] === '|' || c === ';' || c === '|') { segs.push(cur); cur = ''; i++; continue; }
+    if (c === '&' && cmd[i + 1] === '&' || c === '|' && cmd[i + 1] === '|' || c === ';' || c === '|' || c === '\n' || c === '\r') { segs.push(cur); cur = ''; if (c === '&' || c === '|') i++; continue; }
     cur += c;
   }
   segs.push(cur);
@@ -228,10 +232,21 @@ function cmdHead(toks) {
   while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
   if (i < toks.length && /^(sudo|command|nohup|env)$/i.test(toks[i])) i++;
   const h = toks[i] || '';
-  return { head: h.split('/').pop(), rest: toks.slice(i + 1) };
+  return { head: h.split('/').pop().replace(/\.exe$/i, '').toLowerCase(), rest: toks.slice(i + 1) };
+}
+// PS 常量变量展开（$env:TEMP 等，pwsh 经 Bash 调用时出现）——只展开已知项，其余 fail-open
+function expandVars(p) {
+  if (!p || typeof p !== 'string') return p;
+  return p
+    .replace(/\$env:temp\b/gi, os.tmpdir())
+    .replace(/\$env:tmp\b/gi, os.tmpdir())
+    .replace(/\$env:userprofile\b/gi, HOME)
+    .replace(/\$env:home\b/gi, HOME)
+    .replace(/\$env:localappdata\b/gi, path.join(HOME, 'AppData', 'Local'));
 }
 function toWinPath(p, cwd) {
-  if (!p || /\$/.test(p)) return null;
+  if (!p || /\$/.test(p)) { p = expandVars(p); if (!p || /\$/.test(p)) return null; }
+  p = p.replace(/^["']|["']$/g, '');
   p = p.replace(/[^\\]+[\\/]$/, '');
   if (p === '~') return HOME;
   if (p.startsWith('~/') || p.startsWith('~\\')) p = path.join(HOME, p.slice(2));
@@ -298,8 +313,8 @@ function onBashGate(input, sid) {
     const flags = rest.filter((t) => t.startsWith('-')).join(' ');
     const args = rest.filter((t) => !t.startsWith('-') || /^(\/d|\/s)$/i.test(t));
 
-    if (head === 'cd' && rest[0]) { const w = toWinPath(rest[0].replace(/--$/, ''), cwd); if (w) cwd = w; continue; }
-    if (/^dry-run$|^n$/.test(flags.replace(/^-+/, '')) || /(^|\s)(--dry-run)(\s|$)/.test(seg)) continue;
+    if (head === 'cd' || head === 'set-location') { const w = toWinPath((rest[0] || '').replace(/--$/, ''), cwd); if (w) cwd = w; continue; }
+    if (/^dry-run$|^n$/.test(flags.replace(/^-+/, '')) || /(^|\s)(--dry-run)(\s|$)/.test(seg) || /-whatif\b/i.test(flags)) continue;
 
     // 外发类（不变）
     for (const pat of EXTERNAL_HEADS) {
@@ -334,7 +349,8 @@ function onBashGate(input, sid) {
       return msg ? { kind: 'mutate', msg } : null;
     };
     const lastPath = () => args[args.length - 1];
-    if (head === 'rm' || head === 'unlink' || head === 'shred' || head === 'del' || (head === 'git' && rest[0] === 'rm')) {
+    const optVal = (names) => { for (let i = 0; i < rest.length - 1; i++) { if (names.some((n) => rest[i].toLowerCase() === n || rest[i].toLowerCase().startsWith(n + ':'))) return rest[i + 1]; } return null; };
+    if (head === 'rm' || head === 'unlink' || head === 'shred' || head === 'del' || PS_RM.has(head) || (head === 'git' && rest[0] === 'rm')) {
       for (const a of args.slice(head === 'git' ? 1 : 0)) {
         if (a.includes('*') || a.includes('?')) continue;
         const w = toWinPath(a, cwd);
@@ -344,14 +360,19 @@ function onBashGate(input, sid) {
         const g = pathGuard(st, w, 'rm');
         if (g) { verdict = { kind: 'mutate', msg: g }; break; }
       }
-    } else if (head === 'cp' || head === 'mv' || head === 'install' || (head === 'git' && rest[0] === 'mv')) {
-      const g = guarded(lastPath(), 'write');
+    } else if (head === 'cp' || head === 'mv' || head === 'install' || PS_CP.has(head) || PS_MV.has(head) || (head === 'git' && rest[0] === 'mv')) {
+      const dest = optVal(['-destination']) || lastPath();
+      const g = guarded(dest, 'write');
       if (g) verdict = g;
     } else if (head === 'rsync') {
       const g = guarded(lastPath(), 'write');
       if (g) verdict = g;
-    } else if (head === 'tee' || head === 'dd') {
-      const t = head === 'tee' ? lastPath() : (rest.find((x) => x.startsWith('of=')) || '').slice(3);
+    } else if (head === 'tee' || head === 'tee-object' || head === 'dd') {
+      const t = head === 'dd' ? (rest.find((x) => x.startsWith('of=')) || '').slice(3) : (optVal(['-filepath']) || lastPath());
+      const g = guarded(t, 'write');
+      if (g) verdict = g;
+    } else if (PS_SETCONTENT.has(head)) {
+      const t = optVal(['-path', '-filepath']) || lastPath();
       const g = guarded(t, 'write');
       if (g) verdict = g;
     } else if (head === 'curl' || head === 'wget') {
