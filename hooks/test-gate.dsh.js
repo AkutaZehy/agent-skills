@@ -330,5 +330,14 @@ for (const s of [SID + '-m1', SID + '-m1b', SID + '-m1c', SID + '-m1d', SID + '-
 }
 try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
 
+// ── v5: 计划态 / 描述 / 信封（dsh 镜像） ──
+{
+  const r1 = submit('我计划全局移除zcode-wallet，先跑一下看看现状再说');
+  ok('v5a 计划态注入', r1.out.includes('本任务分类=计划'), r1.out.slice(0, 60));
+  ok('v5b 信封不注入', !submit('This session is being continued from a previous conversation that ran out of context. Continue the encoder fix.').out.includes('本任务分类'));
+  const r3 = submit('C:\\Users\\Akuta>ssh cvlab "find /x -type f" 输出如下，帮我看看');
+  ok('v5c 粘贴不注入trio', !r3.out.includes('本任务分类='), r3.out.slice(0, 60));
+}
+
 console.log(`\n==== ${pass} pass, ${fail} fail ====`);
 if (failures.length) { console.log('FAILURES:'); for (const f of failures) console.log(' -', f); process.exit(1); }

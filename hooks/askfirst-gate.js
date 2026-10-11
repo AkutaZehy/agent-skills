@@ -55,6 +55,11 @@ const RE_DIAG = /检查|审查|通读|审一遍|找.{0,3}问题|挑错|审计|�
 const RE_MODIFY = /实现|重构|修改|改成|改一下|更新|修正|调整|补完|补充|新增|加一?[个上条组段节章项行]|删除|去掉|替换|修复|fix|refactor|移植|迁移|写一?[个条份篇章节]|发版|构建|提交|推送|生成|画|导入|导出|批量|重命名|拉取|克隆|恢复|禁用|启用|隐藏|清理|合并|拆|做个|做一个|做一下|写一下|换成|试试|帮我|顺手|改/i;
 const RE_RESEARCH = /调研|是什么|什么是|对比|评估|有哪些|看看|了解|查一下|search|为什么/i;
 const RE_CONT = /^(可以|好的|继续|ok|嗯+|哦|对|是的|行|go|yes|continue|接着|然后|没问题|收到|按|执行|就这样|可以了|修|发|暂停|先这样|收工|等等)/i;
+// v5 计划态/描述：RE_FUTURE=自报计划措辞（计划态，本轮不动手）；RE_PASTE=终端粘贴开头（意图位置不可靠，
+// 判"描述"交给模型侧交叉确认）；RE_ENVELOPE=压缩续跑信封（非用户意图，ambient 级跳过不重置任务态）。
+const RE_FUTURE = /我(计划|打算|在考虑|可能(要|需要|会)|或许(该|需要))|考虑(把|去|先|要不要)|准备(把|去|先)|打算(把|去|先)|planning to|i'm (planning|considering)|i (guess|think) i (should|need|will)|i (might|may) (need|want)/i;
+const RE_PASTE = /^[A-Za-z]:\\[^\n]{0,80}>|^\w+@[^\s]+[^\n]{0,60}\$ /;
+const RE_ENVELOPE = /^This session is being continued from a previous conversation/i;
 const AMBIENT_RE = /^\s*(<in-app-browser-context|Perform a web search for the query:)/;
 
 // v4C 确认点门禁：用户流程指令中的硬停点（"我再确认X""先写一下我看看"）与 AI 问题文本中的确认承诺
@@ -75,9 +80,11 @@ function stripEnvelope(s) {
 }
 function isAmbient(raw) {
   const s = String(raw || '');
-  return AMBIENT_RE.test(s) || /<system-reminder>\s*\[SYSTEM NOTIFICATION/i.test(s);
+  return AMBIENT_RE.test(s) || RE_ENVELOPE.test(s) || /<system-reminder>\s*\[SYSTEM NOTIFICATION/i.test(s);
 }
 function classify(p) {
+  if (RE_PASTE.test(p)) return '描述';
+  if (RE_FUTURE.test(p)) return '计划';
   if (RE_ENV.test(p)) return '环境';
   if (RE_DIAG.test(p) && !RE_MODIFY.test(p)) return '诊断';
   if (RE_PLAN.test(p)) return '读';
@@ -179,10 +186,16 @@ const confirmMsg = (st) =>
   `[ask-first 确认点门禁] 用户在本轮保留了确认权（「${(st && st.pendingConfirm && st.pendingConfirm.q) || ''}」）。先把拟落笔的文件名/样张/方案贴出来等用户回复，用户回应（普通消息即可；AskUserQuestion 的选项回答不算）后继续；scratch/记忆区与工具脚本不受限。本拦不因重跑同一操作而放行。`;
 
 const TRIO_MSG = (type) =>
-  `[开工三件套] 本任务分类=${type}。动手前在交付说明开头给出：①类型与对象；②Done when（完成口径）；③一次 AskUserQuestion 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B、范围、术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
+  `[开工三件套] 本任务分类=${type}（关键词初判，模型判读可推翻）。动手前在交付说明开头给【任务确认】块：任务数+每项类型与对象+hook判vs模型判对照，不一致（含计划态/描述/多任务）时先 AskUserQuestion 质询再动手，用户裁决后写分歧台账（AGENTS.md 口径）。随后逐任务给：①类型与对象；②Done when（完成口径）；③一次 AskUserQuestion 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B、范围、术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
 
 const DIAG_TRIO_MSG =
-  `[开工三件套·诊断] 本任务分类=诊断（检查/审查/通读找问题）。①类型与对象；②Done when；③一次 AskUserQuestion 反问批次（≤4题，锚定口径确认与真实分叉；grep 能答的先自查），若无真分叉写明"无分叉"后开工。诊断任务默认零修改：发现问题时先报告并给修复选项，等用户点头或本轮已明示可修再动。`;
+  `[开工三件套·诊断] 本任务分类=诊断（检查/审查/通读找问题）。①类型与对象；②Done when；③一次 AskUserQuestion 反问批次（≤4题，锚定口径确认与真实分叉；grep 能答的先自查），若无真分叉写明"无分叉"后开工。诊断任务默认零修改：发现问题时先报告并给修复选项，等用户点头或本轮已明示可修再动。多任务先在【任务确认】块拆分（任务数+hook判vs模型判对照，不一致先质询）。`;
+
+const PLAN_TRIO_MSG =
+  `[开工三件套·计划] 本任务分类=计划（计划态：用户宣布意图，本轮不动手）。只做只读核查与方案讨论；交付说明开头给【任务确认】块：任务数+每项类型与对象+hook判vs模型判对照（不一致→先质询）。禁止编辑落笔与执行确认式反问（"删除范围选哪个"这类把执行当既定事实的提问）；用户显式下令（删吧/动手/按清单执行）才进入执行，且只授权被点名的部分。`;
+
+const PLAN_MSG =
+  `[计划态纪律] 本任务为计划态（用户宣布意图），刚才的写入属于修改性操作。回到只读核查与方案讨论，或取得用户显式执行指令后继续；本次已记录，站会审计可见。`;
 
 const DIAG_MSG =
   `[诊断纪律] 本任务为诊断/审查，刚才的写入属于修改性操作。默认零修改：要修复先给选项征得同意（或用户本轮已明示可修后继续）；本次已记录，站会审计可见。`;
@@ -191,7 +204,7 @@ const UNKNOWN_MSG =
   `[三件套对账] 本任务开工时类型未明（unknown），现在首次落笔修改。把类型更正为"读并改"并补全三件套声明（类型/Done when/反问批次），确无分叉则写明"无分叉"后继续；本次已记录。`;
 
 const DRIFT_MSG =
-  `[类型漂移·留痕] 本任务声明为读/检索，现在落笔修改。把类型更正为"读并改"，声明"无新分叉"或补一次反问批次（锚定 done-when 口径与真实分叉；grep 能答的先自查）。本次漂移已记录（driftCount+1，站会审计可见）。`;
+  `[类型漂移·留痕] 本任务声明为读/检索/描述，现在落笔修改。把类型更正为"读并改"，声明"无新分叉"或补一次反问批次（锚定 done-when 口径与真实分叉；grep 能答的先自查）。本次漂移已记录（driftCount+1，站会审计可见）。`;
 
 const GATE_MSG =
   `[三件套对账] 本任务尚未见反问批次。落笔前发一次 AskUserQuestion（锚定 done-when 口径与真实分叉），或在回复开头补全三件套声明；若确无分叉，写明"无分叉"后继续。`;
@@ -486,6 +499,7 @@ function onUserPromptSubmit(input) {
   if (cm) next.pendingConfirm = { q: cm[0], ts: Date.now() };
   writeState(sid, next);
   if (type === '改' || type === '环境') emit('UserPromptSubmit', TRIO_MSG(type));
+  else if (type === '计划') emit('UserPromptSubmit', PLAN_TRIO_MSG);
   else if (type === '诊断') emit('UserPromptSubmit', DIAG_TRIO_MSG);
 }
 
@@ -528,8 +542,8 @@ function onPreToolUse(input) {
   if (kind !== 'mod') { writeState(sid, st); return; }
   if (st.type === '改' || st.type === '环境') {
     if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit('PreToolUse', GATE_MSG); return; }
-  } else if (st.type === '诊断') {
-    if (!st.diagNotified) { st.diagNotified = true; writeState(sid, st); emit('PreToolUse', DIAG_MSG); return; }
+  } else if (st.type === '诊断' || st.type === '计划') {
+    if (!st.diagNotified) { st.diagNotified = true; writeState(sid, st); emit('PreToolUse', st.type === '计划' ? PLAN_MSG : DIAG_MSG); return; }
   } else if (st.type === 'unknown') {
     if (!st.gateAsked) { st.gateAsked = true; writeState(sid, st); emit('PreToolUse', UNKNOWN_MSG); return; }
   } else if (!st.driftNotified) {

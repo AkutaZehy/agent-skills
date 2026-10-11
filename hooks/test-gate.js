@@ -295,5 +295,37 @@ rm1 = m1stop(SIDM6);
 ok('m1g 有任务态的会话→M1 仍独立触发', rm1.code === 0 && rm1.out.includes('M1'), rm1.out.slice(0, 60));
 try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
 
+// ── v5: 计划态 / 描述 / 信封 / 交叉确认 ──
+{
+  const r1 = submit('我计划全局移除zcode-wallet，先跑一下看看现状再说');
+  ok('v5a 计划态注入+标签', r1.out.includes('本任务分类=计划'), r1.out.slice(0, 60));
+  ok('v5b 计划态入state', state() && state().type === '计划', JSON.stringify(state()));
+  ok('v5c 我可能需要→计划', submit('我可能需要卸载这个驱动，先问下影响').out.includes('本任务分类=计划'));
+  ok('v5d 准备把→计划', submit('准备把FRP加上，先看看锚度分布如何？').out.includes('本任务分类=计划'));
+  ok('v5e 叙事"我准备"不误判', !submit('我准备环境变量的时候报错了，排查一下').out.includes('本任务分类=计划'));
+}
+{
+  submit('帮我修改这个文件的编码格式，改成UTF8'); // 置 type=改
+  const before = state().type;
+  const r = submit('This session is being continued from a previous conversation that ran out of context. Continue the encoder fix.');
+  ok('v5f 信封不注入', !r.out.includes('本任务分类'), r.out.slice(0, 60));
+  ok('v5g 信封不重置state', state().type === before, JSON.stringify(state()));
+}
+{
+  const r = submit('C:\\Users\\Akuta>ssh cvlab "find /x -type f -size +500M" 输出如下，帮我看看哪些能删');
+  ok('v5h 终端粘贴→描述', state().type === '描述', JSON.stringify(state()));
+  ok('v5i 描述不注入trio', !r.out.includes('本任务分类='), r.out.slice(0, 60));
+}
+{
+  submit('我打算清理这个模块，先聊聊思路'); // 计划
+  const r = edit(W(path.join(REPO, 'tracked.txt')));
+  ok('v5j 计划态落笔advisory', (r.out + r.err).includes('计划态'), (r.out + r.err).slice(0, 80));
+}
+{
+  submit('chenqian@lthpc:/data$ ls -la');
+  const r = edit(W(path.join(REPO, 'tracked.txt')));
+  ok('v5k 描述落笔漂移', (r.out + r.err).includes('漂移'), (r.out + r.err).slice(0, 80));
+}
+
 console.log(`\n==== ${pass} pass, ${fail} fail ====`);
 if (failures.length) { console.log('FAILURES:'); for (const f of failures) console.log(' -', f); process.exit(1); }

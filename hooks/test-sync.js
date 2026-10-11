@@ -11,6 +11,8 @@ const B = fs.readFileSync(path.join(__dirname, 'askfirst-gate.dsh.js'), 'utf8');
 const MUST_EQUAL = [
   // 分类词表（审计驱动，改一侧必须改另一侧）
   'RE_ENV', 'RE_PLAN', 'RE_DIAG', 'RE_MODIFY', 'RE_RESEARCH', 'RE_CONT',
+  // v5 计划态/描述/信封（改一侧必须改另一侧）
+  'RE_FUTURE', 'RE_PASTE', 'RE_ENVELOPE', 'PLAN_TRIO_MSG', 'PLAN_MSG',
   // 翻转/完成断言词表与豁免
   'FLIP_ADV', 'FLIP_CORE', 'FLIP_CN', 'DONE_RE', 'HEDGE_NEAR',
   // 注入文案（用户可见契约）

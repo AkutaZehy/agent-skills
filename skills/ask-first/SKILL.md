@@ -9,11 +9,11 @@ Asking is the cheapest exit from an ambiguous task. This skill turns a task star
 
 ## 1. The opening trio (every substantive task message)
 
-1. **Type** — read / modify / read+modify / research, with the object named.
+1. **Type** — read / modify / read+modify / research / plan-stage / description, with the object named — and count the tasks first: one message can carry several tasks plus plan-stage intents and pure background, each on its own line.
 2. **Done when** — the acceptance criterion: what phenomenon appears, which test goes green, which bug no longer reproduces.
 3. **Question batch** — one AskUserQuestion (≤4 items). Questions come from two sources only: confirming the done-when reading, and real forks (plan A/B, scope, terminology). Anything a grep can answer, resolve by grep first.
 
-The trio is forced for coding/modification and environment/debugging tasks; for research, read-only, and pure conversation, declare type and done-when and skip the batch. It goes at the top of the deliverable so the user can correct it on sight.
+The trio is forced for coding/modification and environment/debugging tasks; for research, read-only, and pure conversation, declare type and done-when and skip the batch. It goes at the top of the deliverable so the user can correct it on sight. When the harness injects a keyword-based label (本任务分类=X), open with a task-confirmation block: task count + per-task type/object + hook-label-vs-model-reading comparison. On mismatch (plan-stage, description, multi-task) ask one AskUserQuestion before acting; after the user adjudicates, append one JSONL line to the divergence ledger `~/.zcode/askq-divergence.jsonl` (ts / model / prompt head / hook label / model reading / user verdict) for later skill audits.
 
 ## 2. The drift gate
 
@@ -50,6 +50,10 @@ Parse failures (variables, exotic quoting, unconvertible paths, missing git) fai
 
 Hook availability: the gate exists as two harness variants — `hooks/askfirst-gate.js` (ZCode) and `hooks/askfirst-gate.dsh.js` (DSH), kept in sync by `hooks/test-sync.js`. On Claude Code this skill installs as the soft-rules layer (sections 1–5) only; see the repo README for adapting the dsh variant to CC.
 
+## 7. Plan-stage and description utterances
+
+A message that self-reports planning (我计划 / 我打算 / 我在考虑 / 我可能需要; I'm planning to / I guess I should / I'm considering) stays in plan stage regardless of the edit verbs inside it: read-only checks, plan drafts and plan-level questions ("how should this be removed?") are allowed; edits and execution-presupposing questions ("which scope should I delete?") are not. Only an explicit execute order ("删吧 / 动手 / 按清单执行") promotes it to execution, and stepwise authorization still applies — the answer authorizes only the named step. A large context dump with no commissioning verb (pasted terminal output, background notes, compaction envelopes) is a description, not a task: acknowledge or answer, start nothing. The hook pre-labels these (计划 / 描述); when your reading differs from its label, that is exactly the mismatch case in section 1 — surface it and ask, never silently override.
+
 ---
 
 # 中文版（Ask First）
@@ -58,11 +62,11 @@ Hook availability: the gate exists as two harness variants — `hooks/askfirst-g
 
 ## 1. 开工三件套（每条实质性任务消息）
 
-1. **类型**——读 / 改 / 读并改 / 检索，写明对象。
+1. **类型**——读 / 改 / 读并改 / 检索 / 计划 / 描述，写明对象；先数任务数，一条消息可含多任务、计划态意图与纯背景，各自成行。
 2. **Done when**——完成口径：什么现象出现、哪条测试绿、bug 不再复现。
 3. **反问批次**——一次 AskUserQuestion（≤4 题）。题目只来自两个源头：确认 done-when 的口径，与真实分叉（方案 A/B、范围、术语）；grep 能答的先自查。
 
-编码/修改与环境/排障类强制三件套；检索、只读、纯对话类声明类型与 done-when、省略批次。三件套写进交付说明开头，用户可当场纠正。
+编码/修改与环境/排障类强制三件套；检索、只读、纯对话类声明类型与 done-when、省略批次。三件套写进交付说明开头，用户可当场纠正。hook 注入关键词初判标签（本任务分类=X）时，交付说明开头另给【任务确认】块：任务数+每项类型与对象+hook判vs模型判对照；不一致（计划态/描述/多任务）先一次 AskUserQuestion 质询再动手，用户裁决后向 `~/.zcode/askq-divergence.jsonl` 追加一行 JSONL（ts/模型名/prompt 头部/hook 判/模型判/用户裁决），供后续 skill 审计。
 
 ## 2. 漂移闸门
 
@@ -98,3 +102,7 @@ Hook availability: the gate exists as two harness variants — `hooks/askfirst-g
 解析失败（变量、特殊引号、转不了的路径、git 缺失）一律放行——门禁只在"确认会丢东西"时拦，不确定不拦。
 
 hook 归属：闸门有两个 harness 变体——`hooks/askfirst-gate.js`（ZCode）与 `hooks/askfirst-gate.dsh.js`（DSH），由 `hooks/test-sync.js` 守卫契约面同步。Claude Code 安装本 skill 得到的是软规则层（第 1-5 节）；CC 适配 dsh 变体的路径见仓库 README。
+
+## 7. 计划态与描述
+
+用户消息含自报计划措辞（我计划/我打算/我在考虑/我可能需要）时，无论句中是否出现修改动词，本轮一律按计划态处理：允许只读核查、方案讨论与方案级提问（"怎么删比较好"）；禁止编辑落笔与执行确认式反问（"删除范围选哪个"这类把执行当既定事实的提问）。仅当用户显式下令（删吧/动手/按清单执行）才进入执行，且分步授权仍然适用——回答只授权被点名的那一步。大段只给背景、无委托动词的消息（粘贴的终端输出、背景说明、压缩续跑信封）是描述，不是任务：回应即可，不开工。hook 会预打 计划/描述 标签；你的判读与其不一致时，走第 1 节的分歧质询与台账——摆到明面问，不许无声覆盖。
