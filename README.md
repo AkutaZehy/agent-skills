@@ -1,6 +1,6 @@
 # agent-skills
 
-给编码 agent（ZCode / Claude Code 等 SKILL.md 类 harness）的技能合集。每个 skill 一个目录，`skills/<name>/SKILL.md` 统一结构；本 README 是索引和安装总入口。仓库分四层：`skills/`（技能）、`templates/`（AGENTS.md 引用块）、`hooks/`（可选的结构闸门脚本）、`tools/`（配套工具代码）。
+给编码 agent（ZCode / Claude Code 等 SKILL.md 类 harness）的技能合集。每个 skill 一个目录，`skills/<name>/SKILL.md` 统一结构；本 README 是索引和安装总入口。仓库分层：`skills/`（技能）、`templates/`（AGENTS.md 引用块）、`hooks/`（可选的结构闸门脚本）、`deprecated/`（退役技能墓碑，SKILL.md 已改名不被收录）。
 
 本项目由 GLM-5.3-Flash 构建。由原独立仓库 memory-hygiene / ask-first / zcode-wallet 合并而来。
 
@@ -10,7 +10,6 @@
 |---|---|---|---|
 | [memory-hygiene](skills/memory-hygiene/) | 给 agent 的记忆文件卫生规范：记终态别记流水账，说做什么别说别做什么 | 通用 | [README](skills/memory-hygiene/README.md) |
 | [ask-first](skills/ask-first/) | 反问协议 v2：开工三件套（类型/Done when/反问批次）、读→改漂移闸门、超时挂起断点（English/中文双语） | 文本通用；hook 见下 | [README](skills/ask-first/README.md) |
-| [zcode-wallet](skills/zcode-wallet/) | ZCode token/额度账本只读分析："我的额度都烧哪儿了" | 仅 ZCode | [README](tools/zcode-wallet/README.md) |
 | [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | 通用 | [README](skills/strategic-coding/README.md) |
 | [publish-privacy-alert](skills/publish-privacy-alert/) | 对外发布前的隐私卫生审查：机器画像驱动扫描 + 四类核对 + 交付物终扫（数据与逻辑分离，画像仅存本机） | 通用 | [SKILL](skills/publish-privacy-alert/SKILL.md) |
 | [test-hygiene](skills/test-hygiene/) | 测试卫生：红先绿后、断言只来自规格、突变判据审测试、实现与测试上下文隔离 | 通用 | [SKILL](skills/test-hygiene/SKILL.md) |
@@ -42,7 +41,7 @@ negafix 不在默认 `SKILLS` 列表：它是第三方 skill（上游 Ihor Orlov
 
 **Claude Code 用户**：`./install.sh --claude` 装的是 skill 文本层（软规则），hook 变体未做 CC 适配。想上闸门可以 `askfirst-gate.dsh.js` 为基底自行适配——它是 claude 协议形状（snake_case payload、小写工具名），适配点：CC 的 settings.json hooks 注册格式、CC 的 advisory 走 PreToolUse 的 additionalContext（无需 DSH 的 PostToolUse 绕道）、CC 的 Stop 拦截语义。适配后建议跑一遍 test-gate.dsh.js 的用例形态自证。
 
-zcode-wallet 的 SKILL.md 依赖同名 CLI（单文件纯标准库，源码在 [tools/zcode-wallet/](tools/zcode-wallet/)），先看 [tools/zcode-wallet/README.md](tools/zcode-wallet/README.md) 装好 `zwallet` 再装技能。仓库版 SKILL.md 是路径无关的；若你的本地副本有意写死了 CLI 绝对路径，安装时用 `SKILLS` 跳过它，别让脚本覆盖。
+zcode-wallet（技能+CLI）已于 2026-10-11 退役，见 [deprecated/](deprecated/)——其 SKILL.md 已改名 `SKILL.md.retired`，不会被 skills.sh 等收录；需要时从 git 历史或 deprecated/ 目录复活。
 
 ## 加载模型（懒加载机制）
 
@@ -51,7 +50,7 @@ skill 不是装上就常驻生效的，加载分四层：
 1. **description 常驻** — 每会话系统提示里只有一行 name + description，这是唯一的自动触发面，靠语义匹配；
 2. **正文懒加载** — SKILL.md 正文仅在模型判定相关（或 `/skill-name` 手动调用）时才进入上下文；
 3. **AGENTS.md 引用兜底** — 行为类规则需要每次会话无条件在场，把 [templates/](templates/) 里的引用块贴进用户级 AGENTS.md / CLAUDE.md 即可，整段随会话进缓存后近乎零成本；
-4. **工具型 skill 保持懒加载** — 查询/流程类（如 zcode-wallet）天然事件驱动，description 触发词就是启动条件，无需常驻。
+4. **工具型 skill 保持懒加载** — 查询/流程类天然事件驱动，description 触发词就是启动条件，无需常驻。
 
 一句话：**行为规则进 AGENTS.md，操作手册留 skill 懒加载**。这套机制在 ZCode / dsh / Claude Code 等同源 harness 上行为一致：SKILL.md 格式同款，仅安装目录不同；AGENTS.md 引用块三家通用；memory 属于各 harness 本机私有态，不在本仓库范围内。
 

@@ -6,11 +6,11 @@
 #
 # Usage:
 #   ./install.sh --zcode [--claude] [--dsh] [--hooks]
-#   SKILLS="ask-first zcode-wallet" ./install.sh --zcode    # subset
+#   SKILLS="ask-first memory-hygiene" ./install.sh --zcode    # subset
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SKILLS="${SKILLS:-memory-hygiene ask-first zcode-wallet strategic-coding}"
+SKILLS="${SKILLS:-memory-hygiene ask-first strategic-coding}"
 HOOKS=0
 targets=()
 
@@ -39,16 +39,6 @@ for t in "${targets[@]}"; do
     echo "installed: $s -> $t/$s"
   done
 done
-
-case " $SKILLS " in
-  *" zcode-wallet "*)
-    echo
-    echo "note: repo zcode-wallet SKILL.md is path-agnostic (run 'python zwallet.py')."
-    echo "      If your installed copy intentionally pins a local zwallet.py path,"
-    echo "      re-install without it: SKILLS=\"memory-hygiene ask-first\" $0"
-    echo "      CLI setup: see tools/zcode-wallet/README.md"
-    ;;
-esac
 
 if [ "$HOOKS" = "1" ]; then
   cfg="$HOME/.zcode/cli/config.json"
