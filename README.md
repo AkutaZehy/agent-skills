@@ -11,6 +11,7 @@
 | [memory-hygiene](skills/memory-hygiene/) | 给 agent 的记忆文件卫生规范：记终态别记流水账，说做什么别说别做什么 | 通用 | [README](skills/memory-hygiene/README.md) |
 | [ask-first](skills/ask-first/) | 反问协议 v2：开工三件套（类型/Done when/反问批次）、读→改漂移闸门、超时挂起断点（English/中文双语） | 文本通用；hook 见下 | [README](skills/ask-first/README.md) |
 | [strategic-coding](skills/strategic-coding/) | 战略编码纪律：契约面做净（命名/接口/why 注释），实现面允许糙，信号驱动还债 | 通用 | [README](skills/strategic-coding/README.md) |
+| [research-intake](skills/research-intake/) | 多源调研、论文与长文的高保真取材和证据提取流程 | 通用 | [SKILL](skills/research-intake/SKILL.md) |
 | [publish-privacy-alert](skills/publish-privacy-alert/) | 对外发布前的隐私卫生审查：机器画像驱动扫描 + 四类核对 + 交付物终扫（数据与逻辑分离，画像仅存本机） | 通用 | [SKILL](skills/publish-privacy-alert/SKILL.md) |
 | [test-hygiene](skills/test-hygiene/) | 测试卫生：红先绿后、断言只来自规格、突变判据审测试、实现与测试上下文隔离 | 通用 | [SKILL](skills/test-hygiene/SKILL.md) |
 | [negafix](skills/negafix/) | 负向平行结构禁令与审计（"it's not just X, it's Y"），上游 v1.2.1 + 本地中文检测段 | 通用 | [SKILL](skills/negafix/SKILL.md) |
