@@ -335,7 +335,7 @@ try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
   const r1 = submit('我计划全局移除zcode-wallet，先跑一下看看现状再说');
   ok('v5a 计划态注入', r1.out.includes('本任务分类=计划'), r1.out.slice(0, 60));
   ok('v5b 信封不注入', !submit('This session is being continued from a previous conversation that ran out of context. Continue the encoder fix.').out.includes('本任务分类'));
-  const r3 = submit('C:\\Users\\Akuta>ssh cvlab "find /x -type f" 输出如下，帮我看看');
+  const r3 = submit('C:\\Users\\demo>ssh cvlab "find /x -type f" 输出如下，帮我看看');
   ok('v5c 粘贴不注入trio', !r3.out.includes('本任务分类='), r3.out.slice(0, 60));
 }
 

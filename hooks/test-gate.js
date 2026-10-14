@@ -312,7 +312,7 @@ try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
   ok('v5g 信封不重置state', state().type === before, JSON.stringify(state()));
 }
 {
-  const r = submit('C:\\Users\\Akuta>ssh cvlab "find /x -type f -size +500M" 输出如下，帮我看看哪些能删');
+  const r = submit('C:\\Users\\demo>ssh cvlab "find /x -type f -size +500M" 输出如下，帮我看看哪些能删');
   ok('v5h 终端粘贴→描述', state().type === '描述', JSON.stringify(state()));
   ok('v5i 描述不注入trio', !r.out.includes('本任务分类='), r.out.slice(0, 60));
 }
