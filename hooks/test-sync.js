@@ -30,7 +30,7 @@ const MUST_EQUAL = [
 ];
 // ── 有意分叉：只断言两侧都存在（内容差异合法，理由如下） ──
 const ALLOWLIST = {
-  AMBIENT_RE: 'D6: 两 harness 的幽灵流量前缀不同（ZCode=websearch/浏览器块；DSH=runtime-context/meow 等）',
+  AMBIENT_RE: 'D6: 两 harness 的幽灵流量前缀不同（ZCode=websearch/浏览器块；DSH=记忆快照/AGENTS/skill 目录/runtime 等），且 DSH 另有 stripAmbientHeads 前缀剥离——它按 DSH 拼接口径切段，ZCode 的 payload 无此拼接形态',
   zoneOf: 'D5: 分区表按各自会话审计定制（.zcode 根在 ZCode=scratch、在 DSH=user——各管各的脚本之家）',
   onBashGate: '结构分叉：DSH 含 optVal 命名参数与 PostToolUse advisory 路由；行为等价性由各自 test-gate 覆盖',
   onUserPromptSubmit: 'D2/D4: payload 字段名与 advisory 通道不同',

@@ -82,6 +82,51 @@ function isAmbient(raw) {
   const s = String(raw || '');
   return AMBIENT_RE.test(s) || RE_ENVELOPE.test(s) || /<system-reminder>\s*\[SYSTEM NOTIFICATION/i.test(s);
 }
+
+// v6: prompt 可能是"环境注入 + 用户话"的拼接串（DSH 首轮把 hirame/AGENTS/skill-catalog
+// 快照拼在用户消息前）。逐行剥掉开头的 ambient 段，取第一段真实用户内容做分类；
+// 全是 ambient 才判 ambient（保持"环境消息不重置任务态"的原语义）。
+const AMBIENT_HEAD_RE = /^\s*(#\s*Memory \(dsh-|Memory \(dsh-|Current runtime context|Time sampled while|The approval policy changed|\[meow-memory|A skill is a reusable|The following workspace instructions|This session is being continued from a previous conversation)/i;
+// ambient 段内特征行：空行、列表项、缩进续行、Markdown 标题、表格/键值行、代码围栏。
+// 段头命中后，这些行都属于环境快照内容，整段丢弃；其它行视为真实用户话的开端。
+function isAmbientBodyLine(ln) {
+  if (/^\s*$/.test(ln)) return true;                         // 空行
+  if (/^\s{2,}/.test(ln)) return true;                       // 缩进续行
+  if (/^[\s\-*+>|]/.test(ln)) return true;                  // 列表/引用/表格
+  if (/^\s*[|`]{1,3}/.test(ln)) return true;                 // 代码围栏/表格
+  if (/^\s*#{1,6}\s/.test(ln)) return true;                  // Markdown 标题
+  if (/^\s*<\/?[A-Za-z][^>]{0,80}>\s*$/.test(ln)) return true;    // 独立标签行
+  if (/^[A-Za-z_][A-Za-z0-9_.\- ]{0,40}:/.test(ln)) return true;  // key: value（含反引号值/中文值）
+  return false;
+}
+
+function stripAmbientHeads(raw) {
+  // prompt = 「hirame/AGENTS/skill-catalog/runtime 快照」与「用户话」的拼接，段序不固定、无分隔符。
+  // 策略：命中段头即进入 ambient 段（段内行一律丢弃），只保留段外的连续文本作为用户话。
+  let s = String(raw || '')
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '\n')
+    .replace(/<[^>]{1,200}>[^<]{0,4000}<\/[^>]{1,200}>/g, '\n');
+  const lines = s.split(/\r?\n/);
+  const kept = [];
+  let inAmbient = false;
+  for (const ln of lines) {
+    if (AMBIENT_HEAD_RE.test(ln)) { inAmbient = true; continue; }
+    if (inAmbient && isAmbientBodyLine(ln)) continue;
+    if (inAmbient && !isUserProseLine(ln)) continue;
+    inAmbient = false;
+    kept.push(ln);
+  }
+  return kept.join('\n').trim();
+}
+
+// 用户话特征：中文句子、或含空格的自然语言句子（排除纯符号/纯路径/纯标识符）。
+function isUserProseLine(ln) {
+  const t = ln.trim();
+  if (!t) return false;
+  if (/[\u4e00-\u9fff]/.test(t)) return true;                 // 含中文
+  if (t.length >= 12 && /\s/.test(t)) return true;            // 较长的英文句子
+  return false;
+}
 function classify(p) {
   if (RE_PASTE.test(p)) return '描述';
   if (RE_FUTURE.test(p)) return '计划';
@@ -522,13 +567,12 @@ function onUserPromptSubmit(input) {
   const sid = input.session_id || input.sessionId || 'unknown';
   const raw = input.prompt || '';
   const answered = /^User has answered your questions/i.test(stripEnvelope(raw)); // v4C: 问答回应是 tool_result 形态，不清 pending
-  if (isAmbient(raw) || answered) { // v4 a + D6: 不重分类不重置，只续时
+  const p = stripAmbientHeads(raw);   // v6: 剥掉 ambient 前缀，取出真实用户话；全 ambient 时为空
+  if (!p || isAmbient(p) || answered) { // v4 a + D6: 不重分类不重置，只续时
     const st = readState(sid);
     if (st) { st.ts = Date.now(); writeState(sid, st); }
     return;
   }
-  const p = stripEnvelope(raw);
-  if (!p) return;
   if (p.length < 30 && RE_CONT.test(p)) { // v4 b: 纯 CJK 续接可命中
     const st = readState(sid);
     if (st) { st.ts = Date.now(); st.pendingConfirm = null; writeState(sid, st); } // v4C: 续接=用户回应→解除确认点

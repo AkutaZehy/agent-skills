@@ -330,6 +330,25 @@ for (const s of [SID + '-m1', SID + '-m1b', SID + '-m1c', SID + '-m1d', SID + '-
 }
 try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
 
+// ── v6: ambient 前缀与用户话同轮（DSH 首轮把 hirame/AGENTS 快照拼进 prompt） ──
+const NL = String.fromCharCode(10);
+const v6submit = (p) => run('UserPromptSubmit', { session_id: SID + '-v6', prompt: p });
+const HIRAME = ['Memory (dsh-hirame)', '', 'Memory root: `C:\\Users\\demo\\mem`', '', '`MEMORY.md` index:', '- [x](x.md) — y'].join(NL);
+{
+  const r = v6submit(HIRAME + NL + NL + '把这个模块重构成独立包');
+  ok('v6a hirame 快照在前→用户话仍注入', r.out.includes('本任务分类='), r.out.slice(0, 80));
+  const r2 = v6submit('<system-reminder>' + NL + 'foo' + NL + '</system-reminder>' + NL + NL + '再帮我删掉旧配置');
+  ok('v6b system-reminder 在前→用户话仍注入', r2.out.includes('本任务分类='), r2.out.slice(0, 80));
+  const r3 = v6submit('Current runtime context. This snapshot supersedes earlier.' + NL + NL + '帮我改一下这个函数');
+  ok('v6c runtime-context 在前→用户话仍注入', r3.out.includes('本任务分类='), r3.out.slice(0, 80));
+  const r4 = v6submit('A skill is a reusable set of task-specific instructions.' + NL + NL + '帮我改一下这个函数');
+  ok('v6d skill-catalog 在前→用户话仍注入', r4.out.includes('本任务分类='), r4.out.slice(0, 80));
+  const r5 = v6submit(HIRAME);
+  ok('v6e 纯 ambient 无用户话→不注入', !r5.out.includes('本任务分类='), r5.out.slice(0, 80));
+  const r6 = v6submit('把这个模块重构成独立包');
+  ok('v6f 无前缀正常分类（回归）', r6.out.includes('本任务分类='), r6.out.slice(0, 80));
+}
+
 // ── v5: 计划态 / 描述 / 信封（dsh 镜像） ──
 {
   const r1 = submit('我计划全局移除zcode-wallet，先跑一下看看现状再说');
