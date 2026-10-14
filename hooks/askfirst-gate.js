@@ -68,12 +68,42 @@ const AMBIENT_RE = /^\s*(<in-app-browser-context|Perform a web search for the qu
 const CONFIRM_RE = /我再确认|等我确认|我确认一下|我过目|我拍板|先给我看|写一下我看看|我看看再|看看风格|看看.{0,8}再说|看完再|确认后再|确认之后|我看完[后再]/;
 const CONFIRM_ASK_RE = /(你|我)再?确认|先给[你我]看|[你我]看看|给我看一?下/;
 
+// v6: 状态落固定目录（原先用 os.tmpdir()，临时目录会被系统清理，状态一丢就退回'每会话首次'）。
+const STATE_DIR = path.join(HOME || os.homedir(), '.zcode', 'hooks', 'state');
+const STATE_TTL_MS = 24 * 60 * 60 * 1000;   // 过期状态 24h 后清理
+function statePath(sid) {
+  return path.join(STATE_DIR, 'zcode-askfirst-' + String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.json');
+}
 function readState(sid) {
-  try { return JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${sid}.json`), 'utf8')); }
-  catch { return null; }
+  try {
+    const p = statePath(sid);
+    const st = JSON.parse(fs.readFileSync(p, 'utf8'));
+    if (st && typeof st.ts === 'number' && Date.now() - st.ts > STATE_TTL_MS) return null;   // 过期视为无状态
+    return st;
+  } catch { return null; }
 }
 function writeState(sid, st) {
-  try { fs.writeFileSync(path.join(os.tmpdir(), `zcode-askfirst-${sid}.json`), JSON.stringify(st)); } catch {}
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(statePath(sid), JSON.stringify(st));
+    pruneStates();
+  } catch (e) {
+    // 失败可见：状态写不进去会让'每会话一次'退化成'每次都发'，静默会让这类问题藏很久。
+    try { process.stderr.write('[ask-first] state write failed: ' + (e && e.message ? e.message : e) + '\n'); } catch {}
+  }
+}
+let lastPrune = 0;
+function pruneStates() {
+  const now = Date.now();
+  if (now - lastPrune < 10 * 60 * 1000) return;   // 每 10 分钟最多清一次
+  lastPrune = now;
+  try {
+    for (const f of fs.readdirSync(STATE_DIR)) {
+      if (!f.startsWith('zcode-askfirst-') || !f.endsWith('.json')) continue;
+      const fp = path.join(STATE_DIR, f);
+      try { if (now - fs.statSync(fp).mtimeMs > STATE_TTL_MS) fs.unlinkSync(fp); } catch {}
+    }
+  } catch {}
 }
 function stripEnvelope(s) {
   return String(s || '').replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, '').trim();

@@ -29,7 +29,7 @@ function run(event, payload) {
 const submit = (prompt) => run('UserPromptSubmit', { sessionId: SID, prompt });
 const edit = (fp) => run('PreToolUse', { sessionId: SID, toolName: 'Edit', toolInput: { file_path: fp, old_string: 'a', new_string: 'b' }, cwd: HOME });
 const bash = (command, cwd) => run('PreToolUse', { sessionId: SID, toolName: 'Bash', toolInput: { command }, cwd: cwd || HOME });
-const state = () => { try { return JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${SID}.json`), 'utf8')); } catch { return null; } };
+const state = () => { try { return JSON.parse(fs.readFileSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.zcode', 'hooks', 'state', `zcode-askfirst-${SID}.json`), 'utf8')); } catch { return null; } };
 const W = (p) => String(p);
 
 // ── 沙箱 ──
@@ -44,7 +44,7 @@ g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'init');
 fs.writeFileSync(path.join(REPO, 'untracked.txt'), 'untracked pre-existing');
 fs.writeFileSync(SCRATCH_SCRIPT, "const fs=require('fs');\nfs.rmSync('D:/demo/wipe-target/x', {recursive:true, force:true});\n");
 fs.writeFileSync(TMPSCRATCH, 'x');
-try { fs.rmSync(path.join(os.tmpdir(), `zcode-askfirst-${SID}.json`), { force: true }); } catch {}
+try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.zcode', 'hooks', 'state', `zcode-askfirst-${SID}.json`), { force: true }); } catch {}
 
 console.log(`sandbox: sid=${SID}\n  nongit=${NONGIT}\n  repo=${REPO}\n  scratchScript=${SCRATCH_SCRIPT}`);
 
@@ -69,7 +69,7 @@ const edit2 = (fp) => run('PreToolUse', { sessionId: SID2, toolName: 'Edit', too
 submit2('检查一下这个项目的代码有没有明显的问题');
 submit2('继续');
 submit2('修');
-let st2 = null; try { st2 = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${SID2}.json`), 'utf8')); } catch {}
+let st2 = null; try { st2 = JSON.parse(fs.readFileSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.zcode', 'hooks', 'state', `zcode-askfirst-${SID2}.json`), 'utf8')); } catch {}
 ok('t2a 续接后类型保持诊断', st2 && st2.type === '诊断', JSON.stringify(st2 && st2.type));
 r = edit2(path.join(REPO, 'tracked.txt'));
 ok('t2b 诊断任务落笔收诊断纪律(非漂移)', r.out.includes('[诊断纪律'), r.out.slice(0, 80));
@@ -92,7 +92,7 @@ ok('t4b 第二次不再触发', !r.out.includes('[三件套对账') && r.code ==
 console.log('T5 检查分类');
 const SID5 = SID + '-e';
 run('UserPromptSubmit', { sessionId: SID5, prompt: '检查一下现在zcode wallet这个skill怎么写的，我感觉可能有过时的地方' });
-let st5 = null; try { st5 = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${SID5}.json`), 'utf8')); } catch {}
+let st5 = null; try { st5 = JSON.parse(fs.readFileSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.zcode', 'hooks', 'state', `zcode-askfirst-${SID5}.json`), 'utf8')); } catch {}
 ok('t5a 检查一下→诊断', st5 && st5.type === '诊断', JSON.stringify(st5 && st5.type));
 
 // ── T6 真漂移留痕 ──
@@ -103,7 +103,7 @@ const edit6 = (fp) => run('PreToolUse', { sessionId: SID6, toolName: 'Edit', too
 submit6('调研一下当前市场的竞品有哪些');
 r = edit6(path.join(REPO, 'tracked.txt'));
 ok('t6a 漂移文案含留痕标记', r.out.includes('driftCount') || r.out.includes('留痕') || r.out.includes('已记录'), r.out.slice(0, 90));
-let st6 = null; try { st6 = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${SID6}.json`), 'utf8')); } catch {}
+let st6 = null; try { st6 = JSON.parse(fs.readFileSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.zcode', 'hooks', 'state', `zcode-askfirst-${SID6}.json`), 'utf8')); } catch {}
 ok('t6b 状态文件记 driftCount', st6 && (st6.driftCount || 0) >= 1, JSON.stringify(st6 && st6.driftCount));
 
 // ── T7 诊断落笔 advisory ──
@@ -229,7 +229,7 @@ for (const d of [NONGIT, REPO]) { try { fs.rmSync(d, { recursive: true, force: t
 try { fs.rmSync(SCRATCH_SCRIPT, { force: true }); } catch {}
 try { fs.rmSync(TMPSCRATCH, { force: true }); } catch {}
 for (const s of [SID, SID + '-c', SID + '-e', SID + '-f', SID + '-g', SID + '-h', SID + '-i', SID + '-j', SID + '-cf', SID + '-cf2']) {
-  try { fs.rmSync(path.join(os.tmpdir(), `zcode-askfirst-${s}.json`), { force: true }); } catch {}
+  try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.zcode', 'hooks', 'state', `zcode-askfirst-${s}.json`), { force: true }); } catch {}
 }
 
 // ── M1 完成断言证据门（v4B）：需要合成 rollout ──

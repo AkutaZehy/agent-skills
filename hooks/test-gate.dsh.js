@@ -38,7 +38,7 @@ const submit = (prompt) => run('UserPromptSubmit', { session_id: SID, prompt });
 const edit = (fp) => run('PreToolUse', { session_id: SID, tool_name: 'edit', tool_input: { file_path: fp, old_string: 'a', new_string: 'b' }, cwd: HOME });
 const pedit = (fp) => run('PostToolUse', { session_id: SID, tool_name: 'edit', tool_input: { file_path: fp }, cwd: HOME });
 const bash = (command, cwd) => run('PreToolUse', { session_id: SID, tool_name: 'pwsh', tool_input: { command }, cwd: cwd || HOME });
-const state = (sid) => { try { return JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `zcode-askfirst-${sid || SID}.json`), 'utf8')); } catch { return null; } };
+const state = (sid) => { try { return JSON.parse(fs.readFileSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${sid || SID}.json`), 'utf8')); } catch { return null; } };
 const W = (p) => String(p).replace(/\\/g, '/');
 
 // ── 沙箱 ──
@@ -56,7 +56,7 @@ fs.writeFileSync(TMPSCRATCH, 'x');
 fs.mkdirSync(path.dirname(MEMFILE), { recursive: true });
 fs.writeFileSync(MEMFILE, 'test memory');
 fs.mkdirSync(M1DIR, { recursive: true });
-try { fs.rmSync(path.join(os.tmpdir(), `zcode-askfirst-${SID}.json`), { force: true }); } catch {}
+try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${SID}.json`), { force: true }); } catch {}
 
 console.log(`sandbox: sid=${SID}\n  nongit=${NONGIT}\n  repo=${REPO}\n  scratchScript=${SCRATCH_SCRIPT}\n  m1dir=${M1DIR}`);
 
@@ -244,7 +244,7 @@ for (const d of [NONGIT, REPO]) { try { fs.rmSync(d, { recursive: true, force: t
 for (const f of [SCRATCH_SCRIPT, TMPSCRATCH]) { try { fs.rmSync(f, { force: true }); } catch {} }
 try { fs.rmSync(path.join(HOME, '.zcode', 'cli', 'memories', 'projects', `gatetest-${TS}`), { recursive: true, force: true }); } catch {}
 for (const s of [SID, SID + '-c', SID + '-e', SID + '-f', SID + '-g', SID + '-h', SID + '-i', SID + '-j', SID + '-cf', SID + '-cf2']) {
-  try { fs.rmSync(path.join(os.tmpdir(), `zcode-askfirst-${s}.json`), { force: true }); } catch {}
+  try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${s}.json`), { force: true }); } catch {}
 }
 
 // ── M1 完成断言证据门 + 翻转对账（v4B）：合成 DSH sessions 目录 ──
@@ -326,7 +326,7 @@ rm1 = m1stop(SIDF);
 ok('f1 高翻转未反问→FLIP steer', rm1.code === 2 && rm1.err.includes('翻转'), `code=${rm1.code} ${rm1.err.slice(0, 60)}`);
 
 for (const s of [SID + '-m1', SID + '-m1b', SID + '-m1c', SID + '-m1d', SID + '-m1e', SID + '-m1f', SID + '-m1g', SID + '-flip']) {
-  try { fs.rmSync(path.join(os.tmpdir(), `zcode-askfirst-${s}.json`), { force: true }); } catch {}
+  try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${s}.json`), { force: true }); } catch {}
 }
 try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
 
