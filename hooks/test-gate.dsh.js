@@ -38,7 +38,7 @@ const submit = (prompt) => run('UserPromptSubmit', { session_id: SID, prompt });
 const edit = (fp) => run('PreToolUse', { session_id: SID, tool_name: 'edit', tool_input: { file_path: fp, old_string: 'a', new_string: 'b' }, cwd: HOME });
 const pedit = (fp) => run('PostToolUse', { session_id: SID, tool_name: 'edit', tool_input: { file_path: fp }, cwd: HOME });
 const bash = (command, cwd) => run('PreToolUse', { session_id: SID, tool_name: 'pwsh', tool_input: { command }, cwd: cwd || HOME });
-// v7 状态目录改为按 cwd 优先落工作区（`<cwd>/.dsh-hooks-state`），测试台按同一规则定位。
+// v6(D) 状态目录改为按 cwd 优先落工作区（`<cwd>/.dsh-hooks-state`），测试台按同一规则定位。
 const STATE_DIRS = () => [path.join(HOME, '.dsh-hooks-state'), path.join(os.tmpdir(), 'dsh-askfirst-state'), path.join(HOME, '.dsh', 'hooks', 'state')];
 const stateAt = (dir, sid) => { try { return JSON.parse(fs.readFileSync(path.join(dir, `zcode-askfirst-${sid || SID}.json`), 'utf8')); } catch { return null; } };
 const state = (sid) => { for (const d of STATE_DIRS()) { const s = stateAt(d, sid); if (s) return s; } return null; };
@@ -362,33 +362,33 @@ const HIRAME = ['Memory (dsh-hirame)', '', 'Memory root: `C:\\Users\\demo\\mem`'
   ok('v5c 粘贴不注入trio', !r3.out.includes('本任务分类='), r3.out.slice(0, 60));
 }
 
-// ── v7: 状态目录选址（DSH 沙箱只放行工作区 + 临时目录；~/.dsh 只有 RX） ──
+// ── v6(D): 状态目录选址（DSH 沙箱只放行工作区 + 临时目录；~/.dsh 只有 RX） ──
 {
-  const SID7 = SID + '-v7';
+  const SID7 = SID + '-v6d';
   const WS7 = path.join(HOME, `.dsh-gate-test-ws-${TS}`);
   fs.mkdirSync(WS7, { recursive: true });
   try {
-    // v7a: 有 cwd 时状态落工作区内，而不是 ~/.dsh or tmp
+    // v6d-a: 有 cwd 时状态落工作区内，而不是 ~/.dsh or tmp
     run('UserPromptSubmit', { session_id: SID7, prompt: '把这个模块重构成独立包并更新文档', cwd: WS7 });
     const inWs = fs.existsSync(path.join(WS7, '.dsh-hooks-state', `zcode-askfirst-${SID7}.json`));
-    ok('v7a 状态落工作区 .dsh-hooks-state', inWs);
-    // v7b: 状态文件自带 stateDir 标记（跨进程复用同一目录）
+    ok('v6d-a 状态落工作区 .dsh-hooks-state', inWs);
+    // v6d-b: 状态文件自带 stateDir 标记（跨进程复用同一目录）
     const st7 = inWs ? JSON.parse(fs.readFileSync(path.join(WS7, '.dsh-hooks-state', `zcode-askfirst-${SID7}.json`), 'utf8')) : null;
-    ok('v7b 状态记录 stateDir', st7 && st7.stateDir === path.join(WS7, '.dsh-hooks-state'), JSON.stringify(st7 && st7.stateDir));
-    // v7c: 后续调用不带 cwd 也能读到同一份状态（不会另起炉灶）
+    ok('v6d-b 状态记录 stateDir', st7 && st7.stateDir === path.join(WS7, '.dsh-hooks-state'), JSON.stringify(st7 && st7.stateDir));
+    // v6d-c: 后续调用不带 cwd 也能读到同一份状态（不会另起炉灶）
     run('PreToolUse', { session_id: SID7, tool_name: 'edit', tool_input: { file_path: path.join(WS7, 'new-' + TS + '.txt') } });
     const st7b = JSON.parse(fs.readFileSync(path.join(WS7, '.dsh-hooks-state', `zcode-askfirst-${SID7}.json`), 'utf8'));
-    ok('v7c 无 cwd 调用复用同一目录', st7b.memWroteEdit === true, JSON.stringify(st7b.memWroteEdit));
-    // v7d: 写不进去时不留脏文件/不抛错（scratch 目录恒可写，这里验证无 stderr）
+    ok('v6d-c 无 cwd 调用复用同一目录', st7b.memWroteEdit === true, JSON.stringify(st7b.memWroteEdit));
+    // v6d-d: 写不进去时不留脏文件/不抛错（scratch 目录恒可写，这里验证无 stderr）
     const r7 = run('UserPromptSubmit', { session_id: SID7, prompt: '改成独立包', cwd: WS7 });
-    ok('v7d 状态写无 stderr', !/state write failed/.test(r7.err), r7.err.slice(0, 80));
+    ok('v6d-d 状态写无 stderr', !/state write failed/.test(r7.err), r7.err.slice(0, 80));
     try { fs.rmSync(WS7, { recursive: true, force: true }); } catch {}
   } catch (e) {
-    ok('v7 状态目录选址', false, String(e && e.message));
+    ok('v6d 状态目录选址', false, String(e && e.message));
   }
 }
 
-// ── v7: 记忆写入提醒（hirame 只有注入钩子，写不写全凭模型自觉） ──
+// ── v6(D): 记忆写入提醒（hirame 只有注入钩子，写不写全凭模型自觉） ──
 {
   const SIDM = SID + '-mem';
   const MROOT = path.join(HOME, '.zcode', 'cli', 'memories', 'projects', `gatetest-mem-${TS}`, 'memory');
@@ -406,9 +406,9 @@ const HIRAME = ['Memory (dsh-hirame)', '', 'Memory root: `C:\\Users\\demo\\mem`'
   const origSessions = process.env.ASKFIRST_DSH_SESSIONS_DIR;
   // 直接验证消息常量存在 + 触发条件：无记忆操作且有落笔 -> 提醒
   const src = fs.readFileSync(HOOK, 'utf8');
-  ok('v7e 记忆提醒文案存在', /ask-first 记忆写入/.test(src));
-  ok('v7f 记忆提醒每会话一次(sid 维度 state)', /st\.memNotified/.test(src));
-  ok('v7g 有落笔才提醒(纯读轮豁免)', /didWork/.test(src) && /memTouched/.test(src));
+  ok('v6d-e 记忆提醒文案存在', /ask-first 记忆写入/.test(src));
+  ok('v6d-f 记忆提醒每会话一次(sid 维度 state)', /st\.memNotified/.test(src));
+  ok('v6d-g 有落笔才提醒(纯读轮豁免)', /didWork/.test(src) && /memTouched/.test(src));
   try { fs.rmSync(WS8, { recursive: true, force: true }); fs.rmSync(sdir, { recursive: true, force: true }); } catch {}
   if (origSessions !== undefined) process.env.ASKFIRST_DSH_SESSIONS_DIR = origSessions;
 }

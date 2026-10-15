@@ -68,7 +68,7 @@ const CONFIRM_ASK_RE = /(你|我)再?确认|先给[你我]看|[你我]看看|给
 // skill-catalog/agent-instructions/plugin:meow-memory，均以固定前缀进入 prompt）。
 const AMBIENT_RE = /^\s*(<system-reminder|Current runtime context|Time sampled while|The approval policy changed|Memory \(dsh-|\[meow-memory|A skill is a reusable|The following workspace instructions)/i;
 
-// v7: 状态目录选址。v6 写死了 ~/.dsh/hooks/state，但 DSH 把 hook 子进程放进默认
+// v6(D): 状态目录选址。早先写死了 ~/.dsh/hooks/state，但 DSH 把 hook 子进程放进默认
 // workspace-write 沙箱（无 agent/session 的 ctx.shell 调用 → 策略取部署默认），该沙箱对
 // 工作区根与系统临时目录以外的路径只给 RX；~/.dsh 带着 CodexSandboxUsers:(OI)(CI)(RX)，
 // 于是每次写都是 EPERM，'每会话一次'退化成'每次都发'。
@@ -381,7 +381,7 @@ const VERIFY_RE = /(npm|pnpm|yarn)\s+(test|run\s+test|run\s+build)|pytest|python
 const M1_MSG = (w) =>
   `[M1 完成断言证据门] 本轮收尾含完成断言（命中：${w}）。完成态表述需附证据链之一：①背书的测试/命令及其实际结果；②构建产物或实测输出引用。无法实证的部分改写为"预期完成，待验证"。（同轮已含验证命令的回合不触发；每会话至多一次）`;
 
-// v7 记忆写入提醒：hirame 侧只有注入钩子、没有写入钩子，记不记全凭模型自觉。
+// v6(D) 记忆写入提醒：hirame 侧只有注入钩子、没有写入钩子，记不记全凭模型自觉。
 // 实测 d5c5c75d（31 轮）plan 桶零写入；这里在 Stop 兜一次底，只在"本轮有实质落笔、
 // 却没碰过记忆根下任何文件"时提醒一次，每会话至多一次。纯读轮不提醒。
 const MEM_MSG =
@@ -504,7 +504,7 @@ function onBashGate(input, sid) {
   st.reminded = st.reminded || {};
   const cwd0 = ti.workdir || input.cwd || process.cwd();
   const token = crypto.createHash('md5').update(cmd).digest('hex').slice(0, 12);
-  // v7: shell 侧足迹——命令碰过记忆根就算"本轮已处理记忆"，免得 Stop 重复提醒
+  // v6(D): shell 侧足迹——命令碰过记忆根就算"本轮已处理记忆"，免得 Stop 重复提醒
   st.memWroteShell = true;
   try { if (String(cmd).toLowerCase().includes(MEMDIR)) st.memTouched = true; } catch {}
 
@@ -747,7 +747,7 @@ function onPreToolUse(input) {
   const fp = ti.file_path || ti.path || ti.notebook_path || '';
   const w = fp ? toWinPath(fp, input.cwd) : null;
 
-  // v7: 记下"本轮碰过记忆根"（记忆区写在守卫里静默放行，这里补个足迹标记）
+  // v6(D): 记下"本轮碰过记忆根"（记忆区写在守卫里静默放行，这里补个足迹标记）
   if (w) {
     try { if (zoneOf(w) === 'memory') st.memTouched = true; } catch {}
     st.memWroteEdit = true;
@@ -877,7 +877,7 @@ function onStop(input) {
       return;
     }
   }
-  // v7 记忆写入提醒：hirame 只有注入、没有写入钩子，写不写全凭模型自觉（实测 d5c5c75d
+  // v6(D) 记忆写入提醒：hirame 只有注入、没有写入钩子，写不写全凭模型自觉（实测 d5c5c75d
   // 31 轮零记忆操作）。这里在 Stop 侧兜一次底：本轮有实质改动、却没碰过记忆根下的任何文件
   // 时提醒一次。每会话至多一次；纯读轮不提醒（读任务无终态可记）。
   if (st.memNotified || !st.gateAsked) return;   // 未开工过的轮次不提醒
