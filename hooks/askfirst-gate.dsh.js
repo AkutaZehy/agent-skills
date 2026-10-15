@@ -68,39 +68,126 @@ const CONFIRM_ASK_RE = /(你|我)再?确认|先给[你我]看|[你我]看看|给
 // skill-catalog/agent-instructions/plugin:meow-memory，均以固定前缀进入 prompt）。
 const AMBIENT_RE = /^\s*(<system-reminder|Current runtime context|Time sampled while|The approval policy changed|Memory \(dsh-|\[meow-memory|A skill is a reusable|The following workspace instructions)/i;
 
-// v6: 状态落固定目录（原先用 os.tmpdir()，临时目录会被系统清理，状态一丢就退回'每会话首次'）。
-const STATE_DIR = path.join(HOME || os.homedir(), '.dsh', 'hooks', 'state');
+// v7: 状态目录选址。v6 写死了 ~/.dsh/hooks/state，但 DSH 把 hook 子进程放进默认
+// workspace-write 沙箱（无 agent/session 的 ctx.shell 调用 → 策略取部署默认），该沙箱对
+// 工作区根与系统临时目录以外的路径只给 RX；~/.dsh 带着 CodexSandboxUsers:(OI)(CI)(RX)，
+// 于是每次写都是 EPERM，'每会话一次'退化成'每次都发'。
+// 对策：按 cwd 优先落工作区内（一定在写白名单里），依次回退到系统临时目录、~/.dsh。
+// 每个候选先做一次真实探针写，探针成功才采用——把"以为能写"变成"写通过才算数"。
 const STATE_TTL_MS = 24 * 60 * 60 * 1000;   // 过期状态 24h 后清理
-function statePath(sid) {
-  return path.join(STATE_DIR, 'zcode-askfirst-' + String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.json');
+const STATE_DIR_CACHE = new Map();          // cwd(或'') -> 选中的目录
+function stateDirCandidates(cwd) {
+  const out = [];
+  if (cwd && path.isAbsolute(cwd)) out.push(path.join(cwd, '.dsh-hooks-state'));
+  try { out.push(path.join(os.tmpdir(), 'dsh-askfirst-state')); } catch {}
+  out.push(path.join(HOME || os.homedir(), '.dsh', 'hooks', 'state'));
+  return out;
 }
-function readState(sid) {
+// 会话中途才知道 cwd 的调用（UserPromptSubmit 常不带 cwd）不能让状态换目录。
+// 两条发现路径：①候选目录里已有本会话状态文件；②索引文件记着上次选定的目录。
+// 索引落系统临时目录——沙箱对它是可写的，且只是"指针"，丢了也能靠①重建。
+function stateIndexPath(sid) {
+  try { return path.join(os.tmpdir(), 'dsh-askfirst-index', String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.txt'); } catch { return null; }
+}
+function readIndex(sid) {
+  const p = stateIndexPath(sid);
+  if (!p) return null;
+  try { const d = fs.readFileSync(p, 'utf8').trim(); return d || null; } catch { return null; }
+}
+function writeIndex(sid, dir) {
+  const p = stateIndexPath(sid);
+  if (!p) return;
+  try { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, dir); } catch {}
+}
+function existingStateDir(sid) {
+  if (!sid) return null;
+  const indexed = readIndex(sid);
+  if (indexed) { try { if (fs.existsSync(path.join(indexed, stateFileName(sid)))) return indexed; } catch {} }
+  const name = stateFileName(sid);
+  for (const dir of stateDirCandidates(LAST_CWD)) {
+    try { if (fs.existsSync(path.join(dir, name))) return dir; } catch {}
+  }
+  return null;
+}
+function probeWritable(dir) {
   try {
-    const p = statePath(sid);
-    const st = JSON.parse(fs.readFileSync(p, 'utf8'));
-    if (st && typeof st.ts === 'number' && Date.now() - st.ts > STATE_TTL_MS) return null;   // 过期视为无状态
-    return st;
-  } catch { return null; }
+    fs.mkdirSync(dir, { recursive: true });
+    const probe = path.join(dir, '.probe-' + process.pid + '-' + Date.now());
+    fs.writeFileSync(probe, 'ok');
+    fs.unlinkSync(probe);
+    return true;
+  } catch { return false; }
 }
+// 目录选择按"会话"而非"cwd"记忆：同一会话里 UserPromptSubmit（无 cwd）与 PreToolUse
+// （有 cwd）会看到不同的 cwd，若各选各的目录，状态就被劈成两半——读得到的写不到，写得到的
+// 读不到，正是"每会话一次"失效的第二种成因。这里让每个 sid 一旦定下目录就不再改。
+const SID_DIR_CACHE = new Map();
+function stateDirFor(cwd, sid) {
+  const key = sid ? String(sid) : '';
+  if (key && SID_DIR_CACHE.has(key)) return SID_DIR_CACHE.get(key);
+  let chosen = existingStateDir(sid);
+  if (chosen === null) {
+    for (const dir of stateDirCandidates(cwd)) {
+      if (probeWritable(dir)) { chosen = dir; break; }
+    }
+  }
+  if (chosen === null) chosen = path.join(HOME || os.homedir(), '.dsh', 'hooks', 'state'); // 全失败：保留原路径，写失败照旧可见
+  if (key) SID_DIR_CACHE.set(key, chosen);
+  return chosen;
+}
+function statePath(sid, cwd) {
+  return path.join(stateDirFor(cwd), 'zcode-askfirst-' + String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.json');
+}
+// 最近一次见到的会话 cwd：state 里也存一份，避免调用点全都改签名。
+let LAST_CWD = '';
+function noteCwd(input) {
+  const c = input && (input.cwd || (input.tool_input && input.tool_input.workdir));
+  if (typeof c === 'string' && path.isAbsolute(c)) LAST_CWD = c;
+  return LAST_CWD;
+}
+function readState(sid, cwd) {
+  const settled = SID_DIR_CACHE.get(String(sid));
+  // 候选里必须带上 LAST_CWD（调用点普遍只传 sid），否则同一会话的两次调用会扫到不同目录集合。
+  const cands = stateDirCandidates(cwd || LAST_CWD);
+  const dirs = settled ? [settled, ...cands] : cands;
+  for (const dir of dirs) {
+    try {
+      const p = path.join(dir, 'zcode-askfirst-' + String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.json');
+      const st = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (st && typeof st.ts === 'number' && Date.now() - st.ts > STATE_TTL_MS) return null;   // 过期视为无状态
+      if (st && typeof st.stateDir === 'string' && st.stateDir) SID_DIR_CACHE.set(String(sid), st.stateDir);
+      return st;
+    } catch {}
+  }
+  return null;
+}
+function stateFileName(sid) {
+  return 'zcode-askfirst-' + String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.json';
+}
+// 选定目录要跨进程存活（每次 hook 调用都是新进程），所以写进 state 文件本身：
+// 下一次调用 readState 从任意候选目录读到它，就能接着用同一个目录。
 function writeState(sid, st) {
+  const dir = stateDirFor((st && st.cwd) || LAST_CWD, sid);
+  st.stateDir = dir;
+  writeIndex(sid, dir);
   try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(statePath(sid), JSON.stringify(st));
-    pruneStates();
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, stateFileName(sid)), JSON.stringify(st));
+    pruneStates(dir);
   } catch (e) {
     // 失败可见：状态写不进去会让'每会话一次'退化成'每次都发'，静默会让这类问题藏很久。
-    try { process.stderr.write('[ask-first] state write failed: ' + (e && e.message ? e.message : e) + '\n'); } catch {}
+    try { process.stderr.write('[ask-first] state write failed (' + dir + '): ' + (e && e.message ? e.message : e) + '\n'); } catch {}
   }
 }
 let lastPrune = 0;
-function pruneStates() {
+function pruneStates(dir) {
   const now = Date.now();
   if (now - lastPrune < 10 * 60 * 1000) return;   // 每 10 分钟最多清一次
   lastPrune = now;
   try {
-    for (const f of fs.readdirSync(STATE_DIR)) {
+    for (const f of fs.readdirSync(dir)) {
       if (!f.startsWith('zcode-askfirst-') || !f.endsWith('.json')) continue;
-      const fp = path.join(STATE_DIR, f);
+      const fp = path.join(dir, f);
       try { if (now - fs.statSync(fp).mtimeMs > STATE_TTL_MS) fs.unlinkSync(fp); } catch {}
     }
   } catch {}
@@ -294,6 +381,14 @@ const VERIFY_RE = /(npm|pnpm|yarn)\s+(test|run\s+test|run\s+build)|pytest|python
 const M1_MSG = (w) =>
   `[M1 完成断言证据门] 本轮收尾含完成断言（命中：${w}）。完成态表述需附证据链之一：①背书的测试/命令及其实际结果；②构建产物或实测输出引用。无法实证的部分改写为"预期完成，待验证"。（同轮已含验证命令的回合不触发；每会话至多一次）`;
 
+// v7 记忆写入提醒：hirame 侧只有注入钩子、没有写入钩子，记不记全凭模型自觉。
+// 实测 d5c5c75d（31 轮）plan 桶零写入；这里在 Stop 兜一次底，只在"本轮有实质落笔、
+// 却没碰过记忆根下任何文件"时提醒一次，每会话至多一次。纯读轮不提醒。
+const MEM_MSG =
+  '[ask-first 记忆写入] 本轮有实质改动，但记忆根下没有任何文件被读写。若产生了值得跨会话保留的决策/事实/用户偏好，按 dsh-hirame 契约更新对应记忆文件并在 MEMORY.md 同步索引行；若本轮确实无可沉淀（纯排查、临时试验、已由代码或提交记录承载），忽略本条即可。';
+// 能标记"本轮确实干过活"的工具：只读的不算。
+const MEM_TOUCH_TOOLS = ['memWroteEdit', 'memWroteShell'];
+
 // ── pwsh/Bash 门禁（v4B + PowerShell 别名） ────────────────────
 const EXTERNAL_HEADS = [
   [/^git$/, /^push$/],
@@ -400,6 +495,7 @@ function scriptScan(st, cmd, cwd) {
 }
 
 function onBashGate(input, sid) {
+  noteCwd(input);
   const ti = input.tool_input || input.toolInput || {};
   const cmd = ti.command || '';
   if (!cmd) return;
@@ -408,6 +504,9 @@ function onBashGate(input, sid) {
   st.reminded = st.reminded || {};
   const cwd0 = ti.workdir || input.cwd || process.cwd();
   const token = crypto.createHash('md5').update(cmd).digest('hex').slice(0, 12);
+  // v7: shell 侧足迹——命令碰过记忆根就算"本轮已处理记忆"，免得 Stop 重复提醒
+  st.memWroteShell = true;
+  try { if (String(cmd).toLowerCase().includes(MEMDIR)) st.memTouched = true; } catch {}
 
   // v4 i: 脚本内容扫描（先于分段循环，整命令维度）
   const scanMsg = scriptScan(st, cmd, cwd0);
@@ -545,6 +644,7 @@ function onBashGate(input, sid) {
 
 // ── advisory（D4: PostToolUse 发，DSH 桥会注入 additionalContext） ──
 function onAdvisory(input) {
+  noteCwd(input);
   const sid = input.session_id || input.sessionId || 'unknown';
   const tool = input.tool_name || input.toolName || '';
   const ti = input.tool_input || input.toolInput || {};
@@ -595,6 +695,7 @@ function onAdvisory(input) {
 
 function onUserPromptSubmit(input) {
   const sid = input.session_id || input.sessionId || 'unknown';
+  noteCwd(input);
   const raw = input.prompt || '';
   const answered = /^User has answered your questions/i.test(stripEnvelope(raw)); // v4C: 问答回应是 tool_result 形态，不清 pending
   const p = stripAmbientHeads(raw);   // v6: 剥掉 ambient 前缀，取出真实用户话；全 ambient 时为空
@@ -627,6 +728,7 @@ function onUserPromptSubmit(input) {
 
 function onPreToolUse(input) {
   const sid = input.session_id || input.sessionId || 'unknown';
+  noteCwd(input);
   const tool = input.tool_name || input.toolName || '';
   if (TOOL_ASK.has(tool)) {
     const st = readState(sid) || { gateAsked: true, ts: Date.now() };
@@ -638,12 +740,18 @@ function onPreToolUse(input) {
     return;
   }
   if (TOOL_SHELL.has(tool)) { try { onBashGate(input, sid); } catch {} return; }
+  // 注：shell 侧足迹在 onBashGate 内标记（那里能拿到 command 文本）
   if (!TOOL_WRITE.has(tool)) return;
   const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
   const ti = input.tool_input || input.toolInput || {};
   const fp = ti.file_path || ti.path || ti.notebook_path || '';
   const w = fp ? toWinPath(fp, input.cwd) : null;
 
+  // v7: 记下"本轮碰过记忆根"（记忆区写在守卫里静默放行，这里补个足迹标记）
+  if (w) {
+    try { if (zoneOf(w) === 'memory') st.memTouched = true; } catch {}
+    st.memWroteEdit = true;
+  }
   // v4 h: 路径守卫（写/改）——PreToolUse 硬拦
   if (w) {
     const g = pathGuard(st, w, 'write');
@@ -703,6 +811,7 @@ function readSessionTail(file, budget) {
 
 function onStop(input) {
   const sid = input.session_id || input.sessionId || 'unknown';
+  noteCwd(input);
   const st = readState(sid) || { taskKey: 'adhoc', type: 'unknown', gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false, doneGate: false, driftCount: 0, created: [], confirmed: {}, ts: Date.now() };
   const file = findSessionFile(sid);
   if (!file) return;
@@ -759,14 +868,24 @@ function onStop(input) {
     }
   }
   // 翻转对账（v2- 原逻辑，同样 steer）
-  if (st.flipsNotified) return;
-  if (asks > 0 || segs.length === 0) return;
-  const last = countFlips(segs[segs.length - 1]);
-  const prev = countFlips(segs[segs.length - 2] || '');
-  if (last >= 5 || (last >= 3 && prev >= 3)) {
-    st.flipsNotified = true; writeState(sid, st);
-    deny(FLIP_MSG(last));
+  if (!st.flipsNotified && asks === 0 && segs.length > 0) {
+    const last = countFlips(segs[segs.length - 1]);
+    const prev = countFlips(segs[segs.length - 2] || '');
+    if (last >= 5 || (last >= 3 && prev >= 3)) {
+      st.flipsNotified = true; writeState(sid, st);
+      deny(FLIP_MSG(last));
+      return;
+    }
   }
+  // v7 记忆写入提醒：hirame 只有注入、没有写入钩子，写不写全凭模型自觉（实测 d5c5c75d
+  // 31 轮零记忆操作）。这里在 Stop 侧兜一次底：本轮有实质改动、却没碰过记忆根下的任何文件
+  // 时提醒一次。每会话至多一次；纯读轮不提醒（读任务无终态可记）。
+  if (st.memNotified || !st.gateAsked) return;   // 未开工过的轮次不提醒
+  const touchedMemory = (st.memTouched === true);
+  const didWork = MEM_TOUCH_TOOLS.some((n) => st[n] === true);
+  if (touchedMemory || !didWork) return;
+  st.memNotified = true; writeState(sid, st);
+  deny(MEM_MSG);
 }
 
 (async () => {

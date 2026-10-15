@@ -76,16 +76,44 @@ function statePath(sid) {
 }
 function readState(sid) {
   try {
-    const p = statePath(sid);
+    const p = findStateFile(sid).file;
     const st = JSON.parse(fs.readFileSync(p, 'utf8'));
     if (st && typeof st.ts === 'number' && Date.now() - st.ts > STATE_TTL_MS) return null;   // 过期视为无状态
     return st;
   } catch { return null; }
 }
+// v7: 状态目录发现。ZCode 侧没有 DSH 那套 ACL 沙箱，但仍加一层"索引 + 已存在文件"兜底：
+// 同一会话的调用可能来自不同 cwd，固定目录之外的写入应当能被后续调用找到。
+function stateIndexPath(sid) {
+  try { return path.join(os.tmpdir(), 'zcode-askfirst-index', String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.txt'); } catch { return null; }
+}
+function readIndex(sid) {
+  const p = stateIndexPath(sid);
+  if (!p) return null;
+  try { const d = fs.readFileSync(p, 'utf8').trim(); return d || null; } catch { return null; }
+}
+function writeIndex(sid, dir) {
+  const p = stateIndexPath(sid);
+  if (!p) return;
+  try { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, dir); } catch {}
+}
+function findStateFile(sid) {
+  const name = 'zcode-askfirst-' + String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.json';
+  const candidates = [];
+  const indexed = readIndex(sid);
+  if (indexed) candidates.push(indexed);
+  candidates.push(STATE_DIR);
+  for (const dir of candidates) {
+    try { const p = path.join(dir, name); if (fs.existsSync(p)) return { dir, file: p }; } catch {}
+  }
+  return { dir: indexed || STATE_DIR, file: path.join(indexed || STATE_DIR, name) };
+}
 function writeState(sid, st) {
+  const dir = findStateFile(sid).dir;
+  writeIndex(sid, dir);
   try {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
-    fs.writeFileSync(statePath(sid), JSON.stringify(st));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'zcode-askfirst-' + String(sid).replace(/[^A-Za-z0-9._-]/g, '_') + '.json'), JSON.stringify(st));
     pruneStates();
   } catch (e) {
     // 失败可见：状态写不进去会让'每会话一次'退化成'每次都发'，静默会让这类问题藏很久。
@@ -249,6 +277,11 @@ const VERIFY_RE = /(npm|pnpm|yarn)\s+(test|run\s+test|run\s+build)|pytest|python
 const M1_MSG = (w) =>
   `[M1 完成断言证据门] 本轮收尾含完成断言（命中：${w}）。完成态表述需附证据链之一：①背书的测试/命令及其实际结果；②构建产物或实测输出引用。无法实证的部分改写为"预期完成，待验证"。（同轮已含验证命令的回合不触发；每会话至多一次）`;
 
+// v7 记忆写入提醒：与 DSH 变体同义。记忆层只有注入钩子、没有写入钩子，记不记全凭模型自觉；
+// 这里在 Stop 兜一次底，只在"本轮有实质落笔、却没碰过记忆根下任何文件"时提醒，每会话至多一次。
+const MEM_MSG =
+  '[ask-first 记忆写入] 本轮有实质改动，但记忆根下没有任何文件被读写。若产生了值得跨会话保留的决策/事实/用户偏好，按记忆契约更新对应记忆文件并在 MEMORY.md 同步索引行；若本轮确实无可沉淀（纯排查、临时试验、已由代码或提交记录承载），忽略本条即可。';
+
 // ── Bash 门禁 ───────────────────────────────────────────────
 const EXTERNAL_HEADS = [
   [/^git$/, /^push$/],
@@ -362,6 +395,9 @@ function onBashGate(input, sid) {
   st.reminded = st.reminded || {};
   const cwd0 = input.cwd || input.workingDirectory || process.cwd();
   const token = crypto.createHash('md5').update(cmd).digest('hex').slice(0, 12);
+  // v7: shell 侧落笔足迹
+  st.memWroteShell = true;
+  try { if (String(cmd).toLowerCase().includes(MEMDIR)) st.memTouched = true; } catch {}
 
   // v4 i: 脚本内容扫描（先于分段循环，整命令维度）
   const scanMsg = scriptScan(st, cmd, cwd0);
@@ -555,6 +591,11 @@ function onPreToolUse(input) {
   const fp = ti.file_path || ti.path || ti.notebook_path || '';
   const w = fp ? toWinPath(fp, input.cwd) : null;
 
+  // v7: 落笔足迹（供 Stop 侧判断"本轮是否处理过记忆"）
+  if (w) {
+    try { if (zoneOf(w) === 'memory') st.memTouched = true; } catch {}
+    st.memWroteEdit = true;
+  }
   // v4 h: 路径守卫（写/改）
   if (w) {
     const g = pathGuard(st, w, 'write');
@@ -644,14 +685,21 @@ function onStop(input) {
     }
   }
   // 翻转对账（v2- 原逻辑）
-  if (st.flipsNotified) return;
-  if (asks > 0 || segs.length === 0) return;
-  const last = countFlips(segs[segs.length - 1]);
-  const prev = countFlips(segs[segs.length - 2] || '');
-  if (last >= 5 || (last >= 3 && prev >= 3)) {
-    st.flipsNotified = true; writeState(sid, st);
-    emit('Stop', FLIP_MSG(last));
+  if (!st.flipsNotified && asks === 0 && segs.length > 0) {
+    const last = countFlips(segs[segs.length - 1]);
+    const prev = countFlips(segs[segs.length - 2] || '');
+    if (last >= 5 || (last >= 3 && prev >= 3)) {
+      st.flipsNotified = true; writeState(sid, st);
+      emit('Stop', FLIP_MSG(last));
+      return;
+    }
   }
+  // v7 记忆写入提醒：与 DSH 变体同义——本轮有实质落笔却没碰过记忆根时提醒一次，每会话至多一次。
+  if (st.memNotified || !st.gateAsked) return;
+  if (st.memTouched === true) return;
+  if (!(st.memWroteEdit || st.memWroteShell)) return;
+  st.memNotified = true; writeState(sid, st);
+  emit('Stop', MEM_MSG);
 }
 
 (async () => {

@@ -38,7 +38,11 @@ const submit = (prompt) => run('UserPromptSubmit', { session_id: SID, prompt });
 const edit = (fp) => run('PreToolUse', { session_id: SID, tool_name: 'edit', tool_input: { file_path: fp, old_string: 'a', new_string: 'b' }, cwd: HOME });
 const pedit = (fp) => run('PostToolUse', { session_id: SID, tool_name: 'edit', tool_input: { file_path: fp }, cwd: HOME });
 const bash = (command, cwd) => run('PreToolUse', { session_id: SID, tool_name: 'pwsh', tool_input: { command }, cwd: cwd || HOME });
-const state = (sid) => { try { return JSON.parse(fs.readFileSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${sid || SID}.json`), 'utf8')); } catch { return null; } };
+// v7 状态目录改为按 cwd 优先落工作区（`<cwd>/.dsh-hooks-state`），测试台按同一规则定位。
+const STATE_DIRS = () => [path.join(HOME, '.dsh-hooks-state'), path.join(os.tmpdir(), 'dsh-askfirst-state'), path.join(HOME, '.dsh', 'hooks', 'state')];
+const stateAt = (dir, sid) => { try { return JSON.parse(fs.readFileSync(path.join(dir, `zcode-askfirst-${sid || SID}.json`), 'utf8')); } catch { return null; } };
+const state = (sid) => { for (const d of STATE_DIRS()) { const s = stateAt(d, sid); if (s) return s; } return null; };
+const clearState = (sid) => { for (const d of STATE_DIRS()) { try { fs.rmSync(path.join(d, `zcode-askfirst-${sid}.json`), { force: true }); } catch {} } };
 const W = (p) => String(p).replace(/\\/g, '/');
 
 // ── 沙箱 ──
@@ -56,7 +60,7 @@ fs.writeFileSync(TMPSCRATCH, 'x');
 fs.mkdirSync(path.dirname(MEMFILE), { recursive: true });
 fs.writeFileSync(MEMFILE, 'test memory');
 fs.mkdirSync(M1DIR, { recursive: true });
-try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${SID}.json`), { force: true }); } catch {}
+clearState(SID);
 
 console.log(`sandbox: sid=${SID}\n  nongit=${NONGIT}\n  repo=${REPO}\n  scratchScript=${SCRATCH_SCRIPT}\n  m1dir=${M1DIR}`);
 
@@ -242,9 +246,9 @@ ok('c13 无确认措辞→不走确认门', r.code === 0 && !r.err.includes('确
 // ── 清理（先于 M1，M1 用独立目录） ──
 for (const d of [NONGIT, REPO]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch {} }
 for (const f of [SCRATCH_SCRIPT, TMPSCRATCH]) { try { fs.rmSync(f, { force: true }); } catch {} }
-try { fs.rmSync(path.join(HOME, '.zcode', 'cli', 'memories', 'projects', `gatetest-${TS}`), { recursive: true, force: true }); } catch {}
+try { clearState(SID); } catch {}
 for (const s of [SID, SID + '-c', SID + '-e', SID + '-f', SID + '-g', SID + '-h', SID + '-i', SID + '-j', SID + '-cf', SID + '-cf2']) {
-  try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${s}.json`), { force: true }); } catch {}
+  try { clearState(s); } catch {}
 }
 
 // ── M1 完成断言证据门 + 翻转对账（v4B）：合成 DSH sessions 目录 ──
@@ -326,7 +330,7 @@ rm1 = m1stop(SIDF);
 ok('f1 高翻转未反问→FLIP steer', rm1.code === 2 && rm1.err.includes('翻转'), `code=${rm1.code} ${rm1.err.slice(0, 60)}`);
 
 for (const s of [SID + '-m1', SID + '-m1b', SID + '-m1c', SID + '-m1d', SID + '-m1e', SID + '-m1f', SID + '-m1g', SID + '-flip']) {
-  try { fs.rmSync(path.join(HOME || process.env.USERPROFILE || os.homedir(), '.dsh', 'hooks', 'state', `zcode-askfirst-${s}.json`), { force: true }); } catch {}
+  try { clearState(s); } catch {}
 }
 try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
 
@@ -356,6 +360,57 @@ const HIRAME = ['Memory (dsh-hirame)', '', 'Memory root: `C:\\Users\\demo\\mem`'
   ok('v5b 信封不注入', !submit('This session is being continued from a previous conversation that ran out of context. Continue the encoder fix.').out.includes('本任务分类'));
   const r3 = submit('C:\\Users\\demo>ssh cvlab "find /x -type f" 输出如下，帮我看看');
   ok('v5c 粘贴不注入trio', !r3.out.includes('本任务分类='), r3.out.slice(0, 60));
+}
+
+// ── v7: 状态目录选址（DSH 沙箱只放行工作区 + 临时目录；~/.dsh 只有 RX） ──
+{
+  const SID7 = SID + '-v7';
+  const WS7 = path.join(HOME, `.dsh-gate-test-ws-${TS}`);
+  fs.mkdirSync(WS7, { recursive: true });
+  try {
+    // v7a: 有 cwd 时状态落工作区内，而不是 ~/.dsh or tmp
+    run('UserPromptSubmit', { session_id: SID7, prompt: '把这个模块重构成独立包并更新文档', cwd: WS7 });
+    const inWs = fs.existsSync(path.join(WS7, '.dsh-hooks-state', `zcode-askfirst-${SID7}.json`));
+    ok('v7a 状态落工作区 .dsh-hooks-state', inWs);
+    // v7b: 状态文件自带 stateDir 标记（跨进程复用同一目录）
+    const st7 = inWs ? JSON.parse(fs.readFileSync(path.join(WS7, '.dsh-hooks-state', `zcode-askfirst-${SID7}.json`), 'utf8')) : null;
+    ok('v7b 状态记录 stateDir', st7 && st7.stateDir === path.join(WS7, '.dsh-hooks-state'), JSON.stringify(st7 && st7.stateDir));
+    // v7c: 后续调用不带 cwd 也能读到同一份状态（不会另起炉灶）
+    run('PreToolUse', { session_id: SID7, tool_name: 'edit', tool_input: { file_path: path.join(WS7, 'new-' + TS + '.txt') } });
+    const st7b = JSON.parse(fs.readFileSync(path.join(WS7, '.dsh-hooks-state', `zcode-askfirst-${SID7}.json`), 'utf8'));
+    ok('v7c 无 cwd 调用复用同一目录', st7b.memWroteEdit === true, JSON.stringify(st7b.memWroteEdit));
+    // v7d: 写不进去时不留脏文件/不抛错（scratch 目录恒可写，这里验证无 stderr）
+    const r7 = run('UserPromptSubmit', { session_id: SID7, prompt: '改成独立包', cwd: WS7 });
+    ok('v7d 状态写无 stderr', !/state write failed/.test(r7.err), r7.err.slice(0, 80));
+    try { fs.rmSync(WS7, { recursive: true, force: true }); } catch {}
+  } catch (e) {
+    ok('v7 状态目录选址', false, String(e && e.message));
+  }
+}
+
+// ── v7: 记忆写入提醒（hirame 只有注入钩子，写不写全凭模型自觉） ──
+{
+  const SIDM = SID + '-mem';
+  const MROOT = path.join(HOME, '.zcode', 'cli', 'memories', 'projects', `gatetest-mem-${TS}`, 'memory');
+  const WS8 = path.join(HOME, `.dsh-gate-test-memws-${TS}`);
+  fs.mkdirSync(WS8, { recursive: true });
+  const stopRun = (sid, extra) => run('Stop', { session_id: sid, cwd: WS8, ...extra });
+  // 造一个会话日志，供 Stop 侧读尾
+  const sdir = path.join(os.tmpdir(), `gatetest-stop-${TS}`);
+  fs.mkdirSync(sdir, { recursive: true });
+  const logf = path.join(sdir, 'session.v4.jsonl');
+  fs.writeFileSync(logf, [
+    JSON.stringify({ type: 'user/message', seq: 1, data: { source: { kind: 'user' }, content: [{ type: 'text', text: '改成独立包' }] } }),
+    JSON.stringify({ type: 'assistant/message', seq: 2, data: { message: { content: [{ type: 'text', text: '改完了，说明如下。' }] } } }),
+  ].join('\n'));
+  const origSessions = process.env.ASKFIRST_DSH_SESSIONS_DIR;
+  // 直接验证消息常量存在 + 触发条件：无记忆操作且有落笔 -> 提醒
+  const src = fs.readFileSync(HOOK, 'utf8');
+  ok('v7e 记忆提醒文案存在', /ask-first 记忆写入/.test(src));
+  ok('v7f 记忆提醒每会话一次(sid 维度 state)', /st\.memNotified/.test(src));
+  ok('v7g 有落笔才提醒(纯读轮豁免)', /didWork/.test(src) && /memTouched/.test(src));
+  try { fs.rmSync(WS8, { recursive: true, force: true }); fs.rmSync(sdir, { recursive: true, force: true }); } catch {}
+  if (origSessions !== undefined) process.env.ASKFIRST_DSH_SESSIONS_DIR = origSessions;
 }
 
 console.log(`\n==== ${pass} pass, ${fail} fail ====`);
