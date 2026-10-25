@@ -1,6 +1,6 @@
 ---
 name: negafix
-description: You MUST use this when writing or editing prose anywhere in a project (docs, READMEs, marketing copy, commit messages) and when asked to audit, score, or clean up negative parallelism, the "it's not just X, it's Y" construction.
+description: You MUST use this when writing or editing prose anywhere in a project (docs, READMEs, marketing copy, commit messages) and when asked to audit, score, or clean up negative parallelism, the "it's not just X, it's Y" construction, or bare imperative negatives in Chinese functional prose.
 metadata:
   author: Ihor Orlovskyi
   version: "1.2.1"
@@ -95,6 +95,27 @@ rg -nP '(不是|并非)[^，。；]{1,60}，而是' <paths>
 A match is a `violation` only when Y restates X and the negation merely inflates it
 ("不仅仅是工具，更是一套方法论"); a factual correction ("问题不是缓存，而是配置") is
 `plain negation` or `justified contrast`.
+
+### Local extension: bare imperative negatives in Chinese functional prose
+
+Distinct from the rhetoric constructions above: the 2026-10-25 audit found plan/report
+docs and READMEs accumulating bare imperative negatives — "不要手动编辑此文件" left
+without its positive alternative. Scope is narrower than the memory-hygiene rule this
+descends from: functional prose only (READMEs, plans, reports, docs, to-doc products).
+Human-voice prose (blogs, diaries, personal-site copy) stays exempt, and rule/whitelist
+files (AGENTS.md, SKILL.md, templates, CHANGELOGs) legitimately stack negatives.
+
+Detection (a candidate, never a verdict — read the sentence):
+
+```bash
+rg -nP '(?:^|[。；;！?？\n])(?:请)?(?:不要|请勿|勿|切忌|不得|严禁|禁止)(?=[一-鿿A-Za-z])' \
+  --glob '*.{md,txt,rst,adoc}'
+```
+
+A match is a `violation` only when its sentence carries no positive alternative
+(应当/应该/建议/推荐/改为/改用/换成/请用/请按/直接在/统一用/一律/优先/可以用/可通过…).
+"请用生成器重建；不要手动编辑" is paired — no penalty, no row. Rewrite recipe: state the
+positive practice first, keep the negative as the same-sentence exception.
 
 ## Verdicts
 
