@@ -359,7 +359,37 @@ const HIRAME = ['Memory (dsh-hirame)', '', 'Memory root: `C:\\Users\\demo\\mem`'
   ok('v5a 计划态注入', r1.out.includes('本任务分类=计划'), r1.out.slice(0, 60));
   ok('v5b 信封不注入', !submit('This session is being continued from a previous conversation that ran out of context. Continue the encoder fix.').out.includes('本任务分类'));
   const r3 = submit('C:\\Users\\demo>ssh cvlab "find /x -type f" 输出如下，帮我看看');
-  ok('v5c 粘贴不注入trio', !r3.out.includes('本任务分类='), r3.out.slice(0, 60));
+  // v8 起：描述（粘贴）轮不注入全量 trio，但收轻提醒（历史裸奔率最高的桶）
+  ok('v5c 粘贴不注入全量trio', !r3.out.includes('[开工三件套]'), r3.out.slice(0, 60));
+  ok('v5c2 粘贴收轻提醒', r3.out.includes('开工三件套·轻'), r3.out.slice(0, 60));
+}
+
+// ── v8: 轻提醒（B1）+ 最小完备集（B2）+ 功能文卫生（A2，dsh 走 PostToolUse advisory） ──
+{
+  const r1 = submit('调研一下当前各家模型的缓存计费机制');
+  ok('v8a 检索轮收轻提醒', r1.out.includes('开工三件套·轻') && r1.out.includes('本任务分类=检索'), r1.out.slice(0, 80));
+  ok('v8b unknown 轮收轻提醒', submit('前端界面？').out.includes('开工三件套·轻'));
+  ok('v8c 改轮全量 trio 含最小完备集', submit('帮我修改一下README文件，更新版本号并补充新增参数的完整说明').out.includes('最小完备集'));
+}
+{
+  const SIDP = SID + '-p';
+  const submitP = (p) => run('UserPromptSubmit', { session_id: SIDP, prompt: p });
+  const pedP = (fp, extra) => run('PostToolUse', { session_id: SIDP, tool_name: 'edit', tool_input: Object.assign({ file_path: fp }, extra || {}), cwd: HOME });
+  submitP('帮我修改一下README文件，补充新增参数的完整使用说明');
+  const MD = path.join(REPO, `readme-hygiene-${TS}.md`);
+  pedP(MD, { new_string: '初始化。' }); // 消耗 GATE_MSG 槽
+  const r = pedP(MD, { new_string: '部署步骤如下。\n不要手动编辑这个文件。\n' });
+  ok('v8f 祈使负向无正向替代→功能文卫生提醒', r.code === 0 && r.out.includes('功能文卫生'), `code=${r.code} out=${r.out.slice(0, 90)}`);
+  const r2 = pedP(MD, { new_string: '再补一句不要手动编辑这个文件。' });
+  ok('v8g 同文件第二次→不再提醒', r2.code === 0 && !r2.out.includes('功能文卫生'), r2.out.slice(0, 60));
+  const r3 = pedP(path.join(REPO, `readme-ok-${TS}.md`), { new_string: '不要手动编辑这个文件，请用生成器重建。\n' });
+  ok('v8h 同句带正向替代→不提醒', r3.code === 0 && !r3.out.includes('功能文卫生'), r3.out.slice(0, 60));
+  const r4 = pedP(path.join(REPO, 'AGENTS.md'), { new_string: '不要手动编辑这个文件。\n' });
+  ok('v8i 规则文件豁免', r4.code === 0 && !r4.out.includes('功能文卫生'), r4.out.slice(0, 60));
+  const r5 = pedP(path.join(os.tmpdir(), `t-${TS}.md`), { new_string: '不要手动编辑这个文件。\n' }); // D5: dsh 的 scratch=系统tmp+~/.dsh 根
+  ok('v8j scratch 区豁免', r5.code === 0 && !r5.out.includes('功能文卫生'), r5.out.slice(0, 60));
+  const r6 = pedP(path.join(REPO, `code-${TS}.js`), { new_string: '不要手动编辑这个文件。\n' });
+  ok('v8k 非 prose 目标豁免', r6.code === 0 && !r6.out.includes('功能文卫生'), r6.out.slice(0, 60));
 }
 
 // ── v6(D): 状态目录选址（DSH 沙箱只放行工作区 + 临时目录；~/.dsh 只有 RX） ──

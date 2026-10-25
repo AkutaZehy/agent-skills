@@ -17,6 +17,8 @@ const MUST_EQUAL = [
   'FLIP_ADV', 'FLIP_CORE', 'FLIP_CN', 'DONE_RE', 'HEDGE_NEAR',
   // 注入文案（用户可见契约）
   'TRIO_MSG', 'DIAG_TRIO_MSG', 'DIAG_MSG', 'UNKNOWN_MSG', 'DRIFT_MSG', 'GATE_MSG', 'M1_MSG',
+  // v8 轻提醒 + 功能文卫生（改一侧必须改另一侧）
+  'MIN_TRIO_MSG', 'PROSE_EXT_RE', 'PROSE_RULES_RE', 'PROSE_NEG_RE', 'PROSE_POSITIVE_RE', 'PROSE_MSG', 'proseGuard',
   // 门禁危险词表
   'SCRIPT_DANGER', 'SCRIPT_EXEC_RE', 'VERIFY_RE',
   // PowerShell 别名集（回流后两侧等价）

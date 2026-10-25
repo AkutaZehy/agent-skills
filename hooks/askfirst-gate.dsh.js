@@ -26,6 +26,9 @@
 // v4 十块与 v4B(M1) 语义与 ZCode 源一致，见 agent-skills 源码头注释 a-j + M1 段。
 // v4C (确认点门禁) 语义与 ZCode 源一致，见源码头注释 v4C 段；DSH 侧工具名 ask_user_question
 // 的承诺扫描挂在 onPreToolUse 的 TOOL_ASK 分支。
+// v8 (2026-10-25 审计驱动) 语义与 ZCode 源一致，见源码头注释 v8 段：B1 轻提醒（UPS else 分支）+
+// B2 最小完备集文案 + A2 功能文卫生 advisory（挂 onAdvisory 的 PostToolUse 通道，D4 语义；
+// bridge 载荷缺 new_string/content 时 fail-open）。
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
@@ -348,7 +351,7 @@ const confirmMsg = (st) =>
   `[ask-first 确认点门禁] 用户在本轮保留了确认权（「${(st && st.pendingConfirm && st.pendingConfirm.q) || ''}」）。先把拟落笔的文件名/样张/方案贴出来等用户回复，用户回应（普通消息即可；ask_user_question 的选项回答不算）后继续；scratch/记忆区与工具脚本不受限。本拦不因重跑同一操作而放行。`;
 
 const TRIO_MSG = (type) =>
-  `[开工三件套] 本任务分类=${type}（关键词初判，模型判读可推翻）。动手前在交付说明开头给【任务确认】块：任务数+每项类型与对象+hook判vs模型判对照，不一致（含计划态/描述/多任务）时先 ask_user_question 质询再动手，用户裁决后写分歧台账（AGENTS.md 口径）。随后逐任务给：①类型与对象；②Done when（完成口径）；③一次 ask_user_question 反问批次（≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B、范围、术语；grep 能答的先自查）。若无任何真分叉，明确写"无分叉"后开工。`;
+  `[开工三件套] 本任务分类=${type}（关键词初判，模型判读可推翻）。最小完备集=交付说明开头三个短句，必给：类型：…；Done when：…；无分叉（或反问批次）。改/环境类在此之上给【任务确认】块：任务数+每项类型与对象+hook判vs模型判对照，不一致（含计划态/描述/多任务）时先 ask_user_question 质询再动手，用户裁决后写分歧台账（AGENTS.md 口径）。反问批次一次≤4题，题目只锚定 done-when 口径确认与真实分叉 A/B、范围、术语，grep 能答的先自查。`;
 
 const DIAG_TRIO_MSG =
   `[开工三件套·诊断] 本任务分类=诊断（检查/审查/通读找问题）。①类型与对象；②Done when；③一次 ask_user_question 反问批次（≤4题，锚定口径确认与真实分叉；grep 能答的先自查），若无真分叉写明"无分叉"后开工。诊断任务默认零修改：发现问题时先报告并给修复选项，等用户点头或本轮已明示可修再动。多任务先在【任务确认】块拆分（任务数+hook判vs模型判对照，不一致先质询）。`;
@@ -364,6 +367,42 @@ const DIAG_MSG =
 
 const UNKNOWN_MSG =
   `[三件套对账] 本任务开工时类型未明（unknown），现在首次落笔修改。把类型更正为"读并改"并补全三件套声明（类型/Done when/反问批次），确无分叉则写明"无分叉"后继续；本次已记录。`;
+
+// v8(B1) 轻提醒：unknown/读/检索/描述在 UPS 环节历史上零注入（10-25 审计：该桶 39% 整段缺失三件套）。
+const MIN_TRIO_MSG = (type) =>
+  `[开工三件套·轻] 本任务分类=${type}。此类轮次历史上最易整段缺失三件套。交付说明开头给最小完备集一行：类型+Done when+无分叉；豁免反问批次（有真分叉仍问）。若本条实为数据投喂/纯追问可忽略；若实际含修改意图，按"读并改"补全三件套再动手。`;
+
+// v8(A2) 功能文卫生：user 区 prose 落笔扫"祈使负向且同句无正向替代"（审计实证形态："不要xxx"）。
+// advisory 不拦断；规则/模板/变更记录类豁免；每文件每会话至多一次；内容缺失或非字符串 fail-open。
+// 人味文（博客/日记/个人站）不适用——边界见 memory-hygiene skill「Scope boundary」。
+const PROSE_EXT_RE = /\.(md|markdown|txt|rst|adoc)$/i;
+const PROSE_RULES_RE = /(?:^|[/\\])(?:AGENTS|CLAUDE|QWEN)\.md$|(?:^|[/\\])SKILL\.md$|(?:^|[/\\])CHANGELOG[\w.-]*$|[\\/](?:templates|node_modules|\.ctx)[\\/]/i;
+const PROSE_NEG_RE = /(?:^|[。；;!！？\n])(?:（[^）]{0,20}）)?(?:请)?(?:不要|请勿|勿|切忌|不得|严禁|禁止)(?=[\u4e00-\u9fffA-Za-z])/g;
+const PROSE_POSITIVE_RE = /(应当|应该|建议|推荐|改为|改用|换成|请用|请改|请通过|请使用|请按|直接(用|在|交给|调用)|统一(用|在|交)|一律(用|在)|优先(用|在|选)|可以用|可通过|需要时再)/;
+const PROSE_MSG = (hit) =>
+  `[功能文卫生] 本文件属功能文（README/计划/报告类 prose），检出祈使负向且同句缺正向替代：「${hit}」。改写为正向做法优先、负向例外同句成对；规则/清单类的合法负向可忽略本条；人味文（博客/日记/个人站）不适用。每文件至多提醒一次。`;
+function proseGuard(st, w, content) {
+  if (!w || !content || typeof content !== 'string') return null;
+  const key = normWin(w);
+  if (!PROSE_EXT_RE.test(key) || PROSE_RULES_RE.test(key)) return null;
+  st.proseReminded = st.proseReminded || {};
+  if (st.proseReminded[key]) return null;
+  PROSE_NEG_RE.lastIndex = 0;
+  let m;
+  while ((m = PROSE_NEG_RE.exec(content))) {
+    let s0 = 0;
+    const delims = ['\n', '。', '；', '！', '？', ';', '!', '?'];
+    for (const d of delims) { const i = content.lastIndexOf(d, m.index - 1); if (i >= s0) s0 = i + 1; }
+    let s1 = content.length;
+    for (const d of delims) { const i = content.indexOf(d, m.index + m[0].length); if (i >= 0 && i < s1) s1 = i; }
+    const sent = content.slice(s0, Math.min(s1, m.index + 160));
+    if (!PROSE_POSITIVE_RE.test(sent)) {
+      st.proseReminded[key] = Date.now();
+      return content.slice(m.index, m.index + 30).trim();
+    }
+  }
+  return null;
+}
 
 const DRIFT_MSG =
   `[类型漂移·留痕] 本任务声明为读/检索/描述，现在落笔修改。把类型更正为"读并改"，声明"无新分叉"或补一次反问批次（锚定 done-when 口径与真实分叉；grep 能答的先自查）。本次漂移已记录（driftCount+1，站会审计可见）。`;
@@ -690,6 +729,11 @@ function onAdvisory(input) {
     emit(EVENT, DRIFT_MSG);
     return;
   }
+  // v8(A2) 功能文卫生 advisory（PostToolUse 发；bridge 载荷缺 new_string 时 fail-open）
+  if (w) {
+    const hit = proseGuard(st, w, ti.content || ti.new_string || ti.newText || '');
+    if (hit) { writeState(sid, st); emit(EVENT, PROSE_MSG(hit)); return; }
+  }
   writeState(sid, st);
 }
 
@@ -716,6 +760,7 @@ function onUserPromptSubmit(input) {
     type, gateAsked: false, driftNotified: false, diagNotified: false, flipsNotified: false,
     driftCount: 0, driftOutcome: null, doneGate: false,
     created: prev.created || [], confirmed: prev.confirmed || {}, reminded: prev.reminded || {},
+    proseReminded: prev.proseReminded || {},
     ts: Date.now(),
   }; // 注：旧 pendingConfirm 在重建时自然丢弃=用户轮解除
   const cm = CONFIRM_RE.exec(p); // v4C: 新指令含确认点→重新武装
@@ -724,6 +769,7 @@ function onUserPromptSubmit(input) {
   if (type === '改' || type === '环境') emit(EVENT, TRIO_MSG(type));
   else if (type === '计划') emit(EVENT, PLAN_TRIO_MSG);
   else if (type === '诊断') emit(EVENT, DIAG_TRIO_MSG);
+  else emit(EVENT, MIN_TRIO_MSG(type)); // v8(B1): unknown/读/检索/描述 收轻提醒
 }
 
 function onPreToolUse(input) {

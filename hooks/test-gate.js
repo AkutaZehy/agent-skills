@@ -314,7 +314,9 @@ try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
 {
   const r = submit('C:\\Users\\demo>ssh cvlab "find /x -type f -size +500M" 输出如下，帮我看看哪些能删');
   ok('v5h 终端粘贴→描述', state().type === '描述', JSON.stringify(state()));
-  ok('v5i 描述不注入trio', !r.out.includes('本任务分类='), r.out.slice(0, 60));
+  // v8 起：描述（粘贴）轮不注入全量 trio，但收轻提醒（历史裸奔率最高的桶）
+  ok('v5i 描述不注入全量trio', !r.out.includes('[开工三件套]'), r.out.slice(0, 60));
+  ok('v5i2 描述收轻提醒', r.out.includes('开工三件套·轻'), r.out.slice(0, 60));
 }
 {
   submit('我打算清理这个模块，先聊聊思路'); // 计划
@@ -325,6 +327,39 @@ try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
   submit('chenqian@lthpc:/data$ ls -la');
   const r = edit(W(path.join(REPO, 'tracked.txt')));
   ok('v5k 描述落笔漂移', (r.out + r.err).includes('漂移'), (r.out + r.err).slice(0, 80));
+}
+
+// ── v8: unknown/读/检索轻提醒（B1）+ 最小完备集文案（B2）+ 功能文卫生 advisory（A2） ──
+{
+  const r = submit('调研一下当前各家模型的缓存计费机制'); // 检索
+  ok('v8a 检索轮收轻提醒', r.out.includes('开工三件套·轻') && r.out.includes('本任务分类=检索'), r.out.slice(0, 80));
+  const r2 = submit('前端界面？'); // unknown
+  ok('v8b unknown 轮收轻提醒', r2.out.includes('开工三件套·轻') && r2.out.includes('unknown'), r2.out.slice(0, 80));
+  const r3 = submit('帮我修改一下README文件，更新版本号并补充新增参数的完整说明'); // 改
+  ok('v8c 改轮全量 trio 含最小完备集', r3.out.includes('[开工三件套]') && r3.out.includes('最小完备集'), r3.out.slice(0, 80));
+}
+{
+  // 功能文卫生：user 区 prose 落笔扫"祈使负向且同句无正向替代"，advisory 不拦断
+  const SIDP = SID + '-p';
+  const submitP = (p) => run('UserPromptSubmit', { sessionId: SIDP, prompt: p });
+  const editP = (fp, ns) => run('PreToolUse', { sessionId: SIDP, toolName: 'Edit', toolInput: { file_path: fp, old_string: 'a', new_string: ns || 'b' }, cwd: HOME });
+  submitP('帮我修改一下README文件，补充新增参数的完整使用说明');
+  const MD = path.join(REPO, `readme-hygiene-${TS}.md`); // 新文件：路径守卫放行面（AI 创建）
+  editP(MD, '初始化。'); // 消耗 GATE_MSG 槽（改类首次写先收三件套对账）
+  const r = editP(MD, '部署步骤如下。\n不要手动编辑这个文件。\n');
+  ok('v8f 祈使负向无正向替代→功能文卫生提醒', r.code === 0 && r.out.includes('功能文卫生'), `code=${r.code} out=${r.out.slice(0, 90)}`);
+  const r2 = editP(MD, '再补一句不要手动编辑这个文件。');
+  ok('v8g 同文件第二次→不再提醒', r2.code === 0 && !r2.out.includes('功能文卫生'), r2.out.slice(0, 60));
+  const r3 = editP(path.join(REPO, `readme-ok-${TS}.md`), '不要手动编辑这个文件，请用生成器重建。\n');
+  ok('v8h 同句带正向替代→不提醒', r3.code === 0 && !r3.out.includes('功能文卫生'), r3.out.slice(0, 60));
+  const r4 = editP(path.join(REPO, 'AGENTS.md'), '不要手动编辑这个文件。\n');
+  ok('v8i 规则文件豁免', r4.code === 0 && !r4.out.includes('功能文卫生'), r4.out.slice(0, 60));
+  const r5 = editP(path.join(HOME, '.zcode', 'workspace', `t-${TS}.md`), '不要手动编辑这个文件。\n');
+  ok('v8j scratch 区豁免', r5.code === 0 && !r5.out.includes('功能文卫生'), r5.out.slice(0, 60));
+  const r6 = editP(path.join(REPO, `code-${TS}.js`), '不要手动编辑这个文件。\n');
+  ok('v8k 非 prose 目标豁免', r6.code === 0 && !r6.out.includes('功能文卫生'), r6.out.slice(0, 60));
+  const r7 = run('PreToolUse', { sessionId: SIDP, toolName: 'Write', toolInput: { file_path: path.join(REPO, `write-${TS}.md`), content: '用法说明。\n禁止在生产环境直接运行。\n' }, cwd: HOME });
+  ok('v8l Write 工具同样扫描', r7.code === 0 && r7.out.includes('功能文卫生'), `code=${r7.code} out=${r7.out.slice(0, 90)}`);
 }
 
 console.log(`\n==== ${pass} pass, ${fail} fail ====`);
