@@ -1,13 +1,17 @@
 ---
 name: memory-hygiene
-description: Use when writing or editing memory files (auto-memory MEMORY.md and per-project memory/*.md), when a session produced decisions worth persisting, or when the user asks to review/curate/prune memories. Enforces positive framing, terminal-state over narrative, and size budgets so memories stay load-bearing instead of becoming session logs.
+description: Use when writing or editing memory files (auto-memory MEMORY.md and per-project memory/*.md), when a session produced decisions worth persisting, or when the user asks to review/curate/prune memories. Enforces positive framing, terminal-state over narrative, and size budgets so memories stay load-bearing instead of becoming session logs. Also governs functional prose (READMEs, plans, reports, docs): pair imperative negatives with a same-sentence positive alternative; human-voice prose (blogs, diaries) stays exempt.
 ---
 
 # Memory Hygiene
 
-## Scope boundary: memory only, not human-facing prose
+## Scope boundary: memory, functional prose, human-voice prose
 
-These rules govern memory files, whose reader is a future model session. Do not export them to writing for humans (blog posts, docs, READMEs, release notes): there, first-person emotion, narrative, and even complaints are trust-building assets, not pollution. A sanitize pass that strips voice from human-facing prose trades real credibility for a uniform AI register — and typically keeps the AI-flavored filler ("旨在/痛点/闭环"-style corporate fallback) while deleting exactly the lived experience a reader trusts. When reviewing a tone-down rewrite, audit it with the same suspicion as generated text, and restore the voice. Negative-word hygiene (positive framing) stays memory-only; a human reader is never "primed" by a complaint the way a model is by a negative instruction.
+These rules govern memory files, whose reader is a future model session. Human-facing writing is not one bucket — the 2026-10-25 audit split it into two tiers:
+
+**Functional prose (README, plans, reports, docs, to-doc products) inherits the core disciplines.** The reader wants the current truth, so terminal-state-over-narrative applies: record what is; migration/process narrative ("原先存 os.tmpdir()，后改落 …") belongs in a changelog or a decision note, not a README. Imperative negatives ("不要手动编辑此文件") are allowed when they guard a real edge case, but pair the positive alternative in the same sentence ("请用生成器重建；不要手动编辑") — an unpaired "不要xxx" is exactly the dirt form the 2026-10-25 audit found accumulating in plan/report docs. askfirst-gate's 功能文卫生 advisory warns on the unpaired form at write time.
+
+**Human-voice prose (blog posts, diaries, personal-site copy) stays exempt.** Do not export these rules there: first-person emotion, narrative, and even complaints are trust-building assets, not pollution. A sanitize pass that strips voice from human-facing prose trades real credibility for a uniform AI register — and typically keeps the AI-flavored filler ("旨在/痛点/闭环"-style corporate fallback) while deleting exactly the lived experience a reader trusts. When reviewing a tone-down rewrite, audit it with the same suspicion as generated text, and restore the voice. The priming rationale stands: a human reader is never "primed" by a complaint the way a model is by a negative instruction — the functional-prose pairing rule exists for precision and terminal-state clarity, not for priming.
 
 Memories are injected into every future session. Each line you write either steers behavior or pollutes it. These rules come from a 2026-09-13 audit across 10 projects / 91 memory files that found three failure modes: memories that grew into append-style session logs (one file reached 134KB across 55 appends, one was rewritten 136 times in a single session), negative instructions that prime the exact mistakes they warn against, and vivid failure stories that re-inject the failure.
 
