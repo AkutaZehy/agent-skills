@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-SKILLS="${SKILLS:-memory-hygiene ask-first strategic-coding}"
+SKILLS="${SKILLS:-memory-hygiene ask-first strategic-coding shell-hygiene}"
 HOOKS=0
 targets=()
 
