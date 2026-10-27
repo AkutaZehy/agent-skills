@@ -42,6 +42,7 @@ When a negative constraint is unavoidable (true edge cases, existing-behavior wa
 - Single memory file: soft cap ~8KB. When an update would push a file past it, rewrite the file to terminal state and move the full history to `memory-archive/<name>.md` (sibling of memory/, never indexed) — archive is the fallback, the live file must stand alone.
 - MEMORY.md index line: one line, ≤120 chars, what-it-is + current status + pointer. The index is loaded every session; a 5000-char index line is a memory file pretending to be an index.
 - Index file: ≤10KB total. Extra detail lives in the memory files, reachable via one Read.
+- Functional docs (READMEs, plans, reports) carry budgets too: when one is over, relocate content to its owning tier first, condense what stays second, raise the budget last. Ceilings are guardrails, not reduction targets.
 
 ## Update mechanics
 

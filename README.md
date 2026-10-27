@@ -16,6 +16,7 @@
 | [test-hygiene](skills/test-hygiene/) | 测试卫生：红先绿后、断言只来自规格、突变判据审测试、实现与测试上下文隔离 | 通用 | [SKILL](skills/test-hygiene/SKILL.md) |
 | [negafix](skills/negafix/) | 负向平行结构禁令与审计（"it's not just X, it's Y"）+ 中文功能文祈使负向（"不要xxx"须同句配正向），上游 v1.2.1 + 本地中文检测段 | 通用 | [SKILL](skills/negafix/SKILL.md) |
 | [shell-hygiene](skills/shell-hygiene/) | Windows/Git Bash 命令纪律：MSYS 路径转换与三形态路径、引号与 heredoc 转义、Python/PowerShell 编码、预期退出码与白名单收口、破坏性操作前的回滚，末尾给出 oneshot 六项预检 | 通用（偏 Windows/Git Bash） | [README](skills/shell-hygiene/README.md) |
+| [deliverable-medium](skills/deliverable-medium/) | 交付介质判据：六条 HTML 判据、排除项与版式词典指针，命中出单文件 HTML，否则留对话或 markdown | 通用 | [SKILL](skills/deliverable-medium/SKILL.md) |
 
 兼容性口径："通用"=SKILL.md 文本对任何 SKILL.md 类 harness（ZCode/dsh/Claude Code）装上即用；"仅 ZCode"=功能绑定 ZCode 的本地数据（db/rollout）。hook 的兼容性单独一节见下。
 
@@ -35,7 +36,7 @@ SKILLS="ask-first" ./install.sh --zcode  # 只装一个
 
 手动方式等价于对每个 harness 的技能目录 `cp -r skills/<name>`（ZCode=`~/.zcode/skills`、dsh=`~/.dsh/skills`、Claude Code=`~/.claude/skills`）。
 
-默认 `SKILLS` 列表：memory-hygiene、ask-first、strategic-coding、shell-hygiene。其余 skill（research-intake、publish-privacy-alert、test-hygiene、negafix）按需单装：`SKILLS="<name>" ./install.sh --zcode`。
+默认 `SKILLS` 列表：memory-hygiene、ask-first、strategic-coding、shell-hygiene。其余 skill（research-intake、publish-privacy-alert、test-hygiene、negafix、deliverable-medium）按需单装：`SKILLS="<name>" ./install.sh --zcode`。
 
 negafix 是第三方 skill（上游 Ihor Orlovskyi v1.2.1，MIT）加本地中文检测段的补丁版；上游出新版覆盖安装副本会丢中文段，以本仓库 `skills/negafix/` 为正本重拷。
 
