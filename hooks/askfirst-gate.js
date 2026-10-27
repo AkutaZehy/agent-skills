@@ -1,4 +1,4 @@
-// ask-first 开工三件套外置闸门 v4（与 skills/ask-first v2 配套）。
+// ask-first 协议 v7 的 ZCode 外置闸门（gate 特性批次：v4C / v6(Z) / v7-audit，原 v8 标签）。
 // 用法: node askfirst-gate.js <UserPromptSubmit|PreToolUse|Stop>
 // 安装: ./install.sh --hooks （复制本文件到 ~/.zcode/hooks/ 并合并 ZCode config.json）
 // 输入: stdin JSON (ZCode hook payload)。输出: {hookSpecificOutput:{hookEventName, additionalContext}} 或空(放行)；
@@ -31,10 +31,11 @@
 //   AskUserQuestion 的选项回答是 tool_result 形态不触发 UPS，不解除（正是违规形态：问了很多问题、
 //   用户答了系列名，组装后的文件名与样张从未给用户看就直接落盘）。scratch/记忆/meta 区与
 //   工具脚本命名（SCRATCH_BASENAME）不受限。确认 deny 计数入 state.confirmDenies（站会审计可见）。
-// v8 (2026-10-25 审计驱动)：①(B1) UPS 对 unknown/读/检索/描述 补轻提醒——10-25 审计实测该桶 39% 轮整段缺失三件套，
+// v7-audit (2026-10-25 审计驱动；原 v8 标签)：①(B1) UPS 对 unknown/读/检索/描述 补轻提醒——10-25 审计实测该桶 39% 轮整段缺失三件套，
 //   根因=此四类 UPS 环节零注入；②(B2) TRIO_MSG 改为"最小完备集=类型+Done when+无分叉"前置——351 轮实测字面模板率
 //   随轮次位置 88%→54% 而实质 78%，模板过重被自然简化，砍到最小集反而提升字面遵守率；③(A2) 功能文卫生 advisory：
 //   user 区 prose 落笔扫"祈使负向且同句无正向替代"（审计实证形态："不要xxx"进 README/计划文），不拦断。
+// 行内 v8(B1)/v8(A2) 等是 gate 特性批次标签（原 v8），不是协议版本；当前协议 v7。
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');

@@ -4,7 +4,7 @@
 
 ## 用途
 
-本机（Windows + Git Bash）上跑 Bash / PowerShell / Python / Node 命令时的操作纪律，覆盖：MSYS 路径转换与三种路径形态、空格与中文与撇号的引号处理、heredoc 与 `-c` 转义、Python 与 PowerShell 5.1 / pwsh 7 的输出编码、预期非零退出码与真错的区分、破坏性操作前的备份与回滚，以及一条命令一次做完时的六项预检。
+本机（Windows + Git Bash）上跑 Bash / PowerShell / Python / Node 命令时的操作纪律，覆盖：MSYS 路径转换与三种路径形态、空格与中文与撇号的引号处理、heredoc 与 `-c` 转义、Python 与 PowerShell 5.1 / pwsh 7 的输出编码、预期非零退出码与真错的区分、破坏性操作前的备份与回滚，以及一条命令一次做完时的六项预检；第 11 节另给输出落盘与批量纪律（ctx-batch、日志落盘）。
 
 SKILL.md 里的每条规则都带本机实测值（bash 5.3.15 cygwin、ugrep 7.8.4 包装的 grep、Python 3.12.9、PowerShell 5.1.26100.9711 与 pwsh 7.6.7、Node v26.7.0、gh 已登录、cmd 代码页 936），每条给正例与反例。
 
@@ -36,4 +36,4 @@ cp skills/shell-hygiene/SKILL.md ~/.zcode/skills/shell-hygiene/SKILL.md
 | [test-hygiene](../test-hygiene/) | 测试内容与断言质量；本 skill 管跑测试那条命令本身 |
 | [publish-privacy-alert](../publish-privacy-alert/) | 发布前的隐私扫描；本 skill 覆盖扫描命令本身的路径与编码 |
 
-两者可叠加：ask-first 判定「这条命令属于变更类操作」，shell-hygiene 判定「这条命令的路径、引号、编码、退出码与回滚是否成立」。
+这些 skill 可叠加：ask-first 判定「这条命令属于变更类操作」，shell-hygiene 判定「这条命令的路径、引号、编码、退出码与回滚是否成立」。

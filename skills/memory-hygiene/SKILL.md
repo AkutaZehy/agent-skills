@@ -53,7 +53,7 @@ When a negative constraint is unavoidable (true edge cases, existing-behavior wa
 
 ## Review pass (when asked to audit)
 
-1. Size: `wc -c */memory/*.md` — anything >15KB is a rewrite candidate.
+1. Size: `wc -c */memory/*.md` — anything over the ~8KB soft cap is a rewrite candidate.
 2. Negative density: grep for 不要|禁止|避免|不得|别再|严禁|never|don't — each hit is a rewrite candidate unless paired with its positive alternative.
 3. Narrative smell: grep for 被点名|教训|作废|浪费|错误|事故 — keep the rule, compress the story.
 4. Stale hooks: expired deadlines, superseded versions, "待办" already done — update or delete.

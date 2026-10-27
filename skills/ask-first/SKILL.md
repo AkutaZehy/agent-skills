@@ -1,6 +1,8 @@
 ---
 name: ask-first
 description: Ask at task start and at unverifiable forks instead of guessing - opening trio (task type, done-when, one batched AskUserQuestion), read-to-write drift gate, mutation/external Bash gates, suspend-with-breakpoint on timeout. Use when starting a coding or debugging task, when a term, file location, or A/B fork is ambiguous, or when approaches keep flipping. 触发词：反问、先问、开工三件套、不确定就问、超时挂起、变更门禁、外发门禁。
+metadata:
+  version: "7"
 ---
 
 # Ask First
@@ -12,6 +14,8 @@ Asking is the cheapest exit from an ambiguous task. This skill turns a task star
 1. **Type** — read / modify / read+modify / research / plan-stage / description, with the object named — and count the tasks first: one message can carry several tasks plus plan-stage intents and pure background, each on its own line.
 2. **Done when** — the acceptance criterion: what phenomenon appears, which test goes green, which bug no longer reproduces.
 3. **Question batch** — one AskUserQuestion (≤4 items). Questions come from two sources only: confirming the done-when reading, and real forks (plan A/B, scope, terminology). Anything a grep can answer, resolve by grep first.
+
+The minimum complete set is type + done-when + no-fork: three short sentences, owed on every substantive task. The full task-confirmation block is an enhancement for modify/environment tasks, not a substitute (351-round measurement: literal template adherence decays from 88% to 54% by position in the session; treating the minimum set as the standard and the block as an enhancement raises literal adherence).
 
 The trio is forced for coding/modification and environment/debugging tasks; for research, read-only, and pure conversation, declare type and done-when and skip the batch. It goes at the top of the deliverable so the user can correct it on sight. When the harness injects a keyword-based label (本任务分类=X), open with a task-confirmation block: task count + per-task type/object + hook-label-vs-model-reading comparison. On mismatch (plan-stage, description, multi-task) ask one AskUserQuestion before acting; after the user adjudicates, append one JSONL line to the divergence ledger `~/.zcode/askq-divergence.jsonl` (ts / model / prompt head / hook label / model reading / user verdict) for later skill audits.
 
@@ -33,7 +37,9 @@ Candidate answer first, then brief verification (a few lines); keep the first wo
 
 ## 6. Mutation and external gates (hook-enforced)
 
-The `hooks/askfirst-gate.js` gates (v4/v4B/v4C) enforce edit-operation discipline mechanically (see the edit-operation rule: look at the target before write/modify/delete/move). Behavior on a deny: inspect the target (ls/cat/git status) or get user confirmation, then re-run the same command — an exact re-run passes; that re-run is the "I looked" signal. Exception: confirmation-point denies (v4C below) never pass on re-run — only a real user turn clears them.
+The v4/v4B/v4C labels below are gate feature batches, not protocol versions; the current protocol is v7.
+
+The `hooks/askfirst-gate.js` gates (gate feature tags v4/v4B/v4C) enforce edit-operation discipline mechanically (see the edit-operation rule: look at the target before write/modify/delete/move). Behavior on a deny: inspect the target (ls/cat/git status) or get user confirmation, then re-run the same command — an exact re-run passes; that re-run is the "I looked" signal. Exception: confirmation-point denies (v4C below) never pass on re-run — only a real user turn clears them.
 
 | Class | Operations | Gate |
 |---|---|---|
@@ -60,6 +66,8 @@ A message that self-reports planning (我计划 / 我打算 / 我在考虑 / 我
 
 提问是含糊任务最便宜的出口。本 skill 把任务开工变成三件套（类型 / done-when / 一次合并提问），把"读着读着开始改"变成重新过闸的任务，把超时问题变成挂起断点——绝不变成瞎猜。规则中英等价，按当前输出语言选用。
 
+当前协议版本：v7。第 6 节的 v4/v4B/v4C 是 gate 特性批次，不是协议版本。
+
 ## 1. 开工三件套（每条实质性任务消息）
 
 1. **类型**——读 / 改 / 读并改 / 检索 / 计划 / 描述，写明对象；先数任务数，一条消息可含多任务、计划态意图与纯背景，各自成行。
@@ -84,9 +92,9 @@ A message that self-reports planning (我计划 / 我打算 / 我在考虑 / 我
 
 先给候选结论再短验证（几行内）；方案第一次可行就沿用；简单任务不跑验证循环。验证冲动是 RL 训练烙进去的，删不掉——当旋钮用，不当开关用。
 
-## 6. 变更与外发门禁（hook 强制，v4/v4B/v4C）
+## 6. 变更与外发门禁（hook 强制；gate 特性批次 v4/v4B/v4C）
 
-`hooks/askfirst-gate.js` 的门禁（v4/v4B/v4C）把编辑操作纪律机械化（写/改/删/挪先看目标）。被拦时的动作：先看目标（ls/cat/git status）或先经用户确认，然后**重跑同一命令即放行**——重跑就是"看过一眼"的信号（要求逐字相同）。例外：确认点门禁（v4C，见下表）**重跑不放行**，只有真实用户消息解除。
+当前协议 v7；下列 v4/v4B/v4C 是 gate 特性批次，不是协议版本。`hooks/askfirst-gate.js` 的门禁（v4/v4B/v4C）把编辑操作纪律机械化（写/改/删/挪先看目标）。被拦时的动作：先看目标（ls/cat/git status）或先经用户确认，然后**重跑同一命令即放行**——重跑就是"看过一眼"的信号（要求逐字相同）。例外：确认点门禁（v4C，见下表）**重跑不放行**，只有真实用户消息解除。
 
 | 类别 | 操作 | 门禁 |
 |---|---|---|

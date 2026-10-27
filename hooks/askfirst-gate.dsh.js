@@ -1,5 +1,5 @@
-// ask-first 开工三件套外置闸门 v4C-dsh（DSH 适配版，源: agent-skills/hooks/askfirst-gate.js v4C）。
-// 用法: node askfirst-gate.js <UserPromptSubmit|PreToolUse|PostToolUse|Stop>
+// ask-first 协议 v7 的 DSH 外置闸门（源: agent-skills/hooks/askfirst-gate.js；gate 特性批次：v4C / v6(D) / v7-audit，原 v8 标签）。
+// 用法: node askfirst-gate.dsh.js <UserPromptSubmit|PreToolUse|PostToolUse|Stop>
 // 输入: stdin JSON（DSH claude-bridge payload: session_id/tool_name/tool_input/cwd/prompt，snake_case）。
 // 输出: exit 0 + {hookSpecificOutput:{hookEventName, additionalContext}}（advisory）；
 //       拦截时 stderr 写理由并 exit 2（DSH 语义: PreToolUse deny / Stop steer）。
@@ -26,9 +26,10 @@
 // v4 十块与 v4B(M1) 语义与 ZCode 源一致，见 agent-skills 源码头注释 a-j + M1 段。
 // v4C (确认点门禁) 语义与 ZCode 源一致，见源码头注释 v4C 段；DSH 侧工具名 ask_user_question
 // 的承诺扫描挂在 onPreToolUse 的 TOOL_ASK 分支。
-// v8 (2026-10-25 审计驱动) 语义与 ZCode 源一致，见源码头注释 v8 段：B1 轻提醒（UPS else 分支）+
+// v7-audit (2026-10-25 审计驱动；原 v8 标签) 语义与 ZCode 源一致，见源码头注释 v7-audit 段：B1 轻提醒（UPS else 分支）+
 // B2 最小完备集文案 + A2 功能文卫生 advisory（挂 onAdvisory 的 PostToolUse 通道，D4 语义；
 // bridge 载荷缺 new_string/content 时 fail-open）。
+// 行内 v8(B1)/v8(A2) 等是 gate 特性批次标签（原 v8），不是协议版本；当前协议 v7。
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');

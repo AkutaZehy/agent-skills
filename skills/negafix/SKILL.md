@@ -3,7 +3,7 @@ name: negafix
 description: You MUST use this when writing or editing prose anywhere in a project (docs, READMEs, marketing copy, commit messages) and when asked to audit, score, or clean up negative parallelism, the "it's not just X, it's Y" construction, or bare imperative negatives in Chinese functional prose.
 metadata:
   author: Ihor Orlovskyi
-  version: "1.2.1"
+  version: "1.2.1+local.1"
 license: MIT
 ---
 

@@ -18,10 +18,10 @@
 
 ```bash
 # ZCode（用户级 skill）
-cp skills/memory-hygiene/SKILL.md ~/.zcode/skills/memory-hygiene/SKILL.md
+cp -r skills/memory-hygiene ~/.zcode/skills/
 
 # Claude Code
-cp skills/memory-hygiene/SKILL.md ~/.claude/skills/memory-hygiene/SKILL.md
+cp -r skills/memory-hygiene ~/.claude/skills/
 ```
 
 更有效的用法是在用户级指令文件（AGENTS.md / CLAUDE.md）的记忆规则里直接引用它——skill 靠语义匹配触发，规则引用则保证每次写记忆时规范一定在场：

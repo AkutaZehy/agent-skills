@@ -1,4 +1,4 @@
-// askfirst-gate v4 测试台。用法: node test-gate.js [被测hook路径]
+// ask-first 协议 v7 测试台（覆盖 gate 批次 v4C / v5 / v6 / v7-audit；v8a…v8l 为历史用例名）。用法: node test-gate.js [被测hook路径]
 // 每次运行构建独立沙箱(时间戳 sid/目录)，断言 {exit, stdout, stderr}。
 const fs = require('fs');
 const os = require('os');
@@ -314,7 +314,7 @@ try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
 {
   const r = submit('C:\\Users\\demo>ssh cvlab "find /x -type f -size +500M" 输出如下，帮我看看哪些能删');
   ok('v5h 终端粘贴→描述', state().type === '描述', JSON.stringify(state()));
-  // v8 起：描述（粘贴）轮不注入全量 trio，但收轻提醒（历史裸奔率最高的桶）
+  // v7-audit 起：描述（粘贴）轮不注入全量 trio，但收轻提醒（历史裸奔率最高的桶）
   ok('v5i 描述不注入全量trio', !r.out.includes('[开工三件套]'), r.out.slice(0, 60));
   ok('v5i2 描述收轻提醒', r.out.includes('开工三件套·轻'), r.out.slice(0, 60));
 }
@@ -329,7 +329,7 @@ try { fs.rmSync(M1DIR, { recursive: true, force: true }); } catch {}
   ok('v5k 描述落笔漂移', (r.out + r.err).includes('漂移'), (r.out + r.err).slice(0, 80));
 }
 
-// ── v8: unknown/读/检索轻提醒（B1）+ 最小完备集文案（B2）+ 功能文卫生 advisory（A2） ──
+// ── v7-audit: unknown/读/检索轻提醒（B1）+ 最小完备集文案（B2）+ 功能文卫生 advisory（A2）；v8a…v8l 为历史用例名 ──
 {
   const r = submit('调研一下当前各家模型的缓存计费机制'); // 检索
   ok('v8a 检索轮收轻提醒', r.out.includes('开工三件套·轻') && r.out.includes('本任务分类=检索'), r.out.slice(0, 80));

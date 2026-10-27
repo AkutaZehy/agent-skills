@@ -3,6 +3,14 @@
 All notable changes to the `negafix` skill. Versions refer to `metadata.version`
 in SKILL.md. This file is for maintainers and is never loaded by agents using the skill.
 
+## [1.2.1+local.1] - 2026-10-25
+
+Local extension; upstream 1.2.1 behavior unchanged.
+
+### Added
+- Local extension for bare imperative negatives in Chinese functional prose (`SKILL.md` §Local extension).
+- Frontmatter description now includes the Chinese functional-prose trigger.
+
 ## [1.2.1] - 2026-08-21
 
 Description-cost release: shorter frontmatter description, same behavior.

@@ -81,7 +81,7 @@ bash "$SCAN" "$tmp/profile" > /dev/null 2>&1
 check "no target exits 2" 2 "$?"
 
 # 9) binary file skipped via -I → CLEAN(0)
-printf 'binary\x00blob with sk-ABCDEF1234567890ABCDEF inside' > "$tmp/bin.dat"
+printf 'binary\0blob with %s inside' 'C:\Users\alice\notes.txt' > "$tmp/bin.dat"
 bash "$SCAN" "$tmp/profile" "$tmp/bin.dat" > "$tmp/o3" 2>&1
 check "binary file skipped via -I exits CLEAN(0)" 0 "$?"
 
@@ -95,5 +95,13 @@ grep -q "leak.md:" "$tmp/o4" && echo "pass: file attribution present" || { echo 
 bash "$SCAN" "$tmp/profile" "$tmp/leak.md" "$tmp/clean.md" > "$tmp/o5" 2>&1
 check "multi-target exits HIT(1)" 1 "$?"
 grep -q "leak.md:" "$tmp/o5" && echo "pass: attribution kept in multi-target" || { echo "FAIL: attribution lost"; fail=1; }
+
+# 12) file symlink to a leak file → scanned and HIT(1); skip when the host cannot create symlinks
+if ln -s "$tmp/leak.md" "$tmp/link.md" 2>/dev/null && [ -L "$tmp/link.md" ]; then
+  bash "$SCAN" "$tmp/profile" "$tmp/link.md" > "$tmp/o6" 2>&1
+  check "file symlink is followed and exits HIT(1)" 1 "$?"
+else
+  echo "skip: symlink creation unavailable in this environment"
+fi
 
 exit $fail

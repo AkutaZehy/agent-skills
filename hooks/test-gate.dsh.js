@@ -1,4 +1,4 @@
-// askfirst-gate v4B 测试台（DSH 适配版）。用法: node test-gate.js [被测hook路径]
+// ask-first 协议 v7 测试台（DSH 适配版；覆盖 gate 批次 v4C / v5 / v6(D) / v7-audit）。用法: node test-gate.dsh.js [被测hook路径]
 // 每次运行构建独立沙箱(时间戳 sid/目录)，断言 {exit, stdout, stderr}。
 // 与 ZCode 版差异：payload 为 DSH claude-bridge 形状（session_id/tool_name/tool_input/cwd）；
 // advisory 走 PostToolUse（DSH 的 PreToolUse additionalContext 会被 bridge 丢弃）；
@@ -359,12 +359,12 @@ const HIRAME = ['Memory (dsh-hirame)', '', 'Memory root: `C:\\Users\\demo\\mem`'
   ok('v5a 计划态注入', r1.out.includes('本任务分类=计划'), r1.out.slice(0, 60));
   ok('v5b 信封不注入', !submit('This session is being continued from a previous conversation that ran out of context. Continue the encoder fix.').out.includes('本任务分类'));
   const r3 = submit('C:\\Users\\demo>ssh cvlab "find /x -type f" 输出如下，帮我看看');
-  // v8 起：描述（粘贴）轮不注入全量 trio，但收轻提醒（历史裸奔率最高的桶）
+  // v7-audit 起：描述（粘贴）轮不注入全量 trio，但收轻提醒（历史裸奔率最高的桶）
   ok('v5c 粘贴不注入全量trio', !r3.out.includes('[开工三件套]'), r3.out.slice(0, 60));
   ok('v5c2 粘贴收轻提醒', r3.out.includes('开工三件套·轻'), r3.out.slice(0, 60));
 }
 
-// ── v8: 轻提醒（B1）+ 最小完备集（B2）+ 功能文卫生（A2，dsh 走 PostToolUse advisory） ──
+// ── v7-audit: 轻提醒（B1）+ 最小完备集（B2）+ 功能文卫生（A2，dsh 走 PostToolUse advisory）；v8a…v8l 为历史用例名 ──
 {
   const r1 = submit('调研一下当前各家模型的缓存计费机制');
   ok('v8a 检索轮收轻提醒', r1.out.includes('开工三件套·轻') && r1.out.includes('本任务分类=检索'), r1.out.slice(0, 80));
