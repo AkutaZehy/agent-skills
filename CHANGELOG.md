@@ -4,6 +4,13 @@
 
 版本轴说明：v2 / v5 / v6 / v7 是协议（行为）版本；v3 / v4 / v4B / v4C 是 hook 门禁特性批次。两者曾共用 `vN` 标号，历史节按内容判断。
 
+## 2026-10-27 · 记忆分层、索引生成与同步 SOP
+
+1. **memory-hygiene 1.0.0**（版本自本日起算）——新增"记忆落点三分"（全局 / 项目 / 沙箱）、提升判据（跨工作区可复用且非一次性）、索引生成契约（`MEMORY.md` 是产物，只收 `type: feedback` 与 `type: user`）、归档语义（退出索引不等于移动文件；`supersedes:` 取代时间规则）。
+2. **publish-privacy-alert 1.0.0**（版本自本日起算）——新增与 magpie 出站脱敏的边界说明：值级、可逆、只覆盖过网关的流量；发布树级判定仍由本 skill 承担。
+3. **工具** —— 新增 `tools/memory-index.py`（渲染 `MEMORY.md` 与 `--check`，退出码 0 一致 / 1 漂移 / 2 错误）。
+4. **协作纪律** —— AGENTS.md 增加 agent-skills 同步 SOP，以及该仓库的免逐次确认发布例外：`test-docs.js`、`test-sync.js`、`scan.sh` 三者全绿才 push。
+
 ## v7 (2026-10-25)
 
 > 本版原标签为 v8。`7a5059e` 曾把 DSH 状态修复标为 v7，`ef04dd6` 随即撤销并归入 v6，该 v7 未发布；本版回收 v7 作为协议版本。历史 commit 标签保持原样。

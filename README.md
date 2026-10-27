@@ -46,6 +46,13 @@ negafix 是第三方 skill（上游 Ihor Orlovskyi v1.2.1，MIT）加本地中�
 
 **版本口径**：ask-first 协议当前为 v7；hook 的 v4/v4B/v4C 等是 gate 特性批次，不是协议版本。变更史见 [CHANGELOG.md](CHANGELOG.md)。
 
+**Skill 版本**（`x.y.z`：措辞澄清/示例 = patch；触发条件/输出格式/权限变化 = minor；删除能力或改变默认行为 = major；`hooks/test-docs.js` 断言下表与各 SKILL frontmatter 的 `version` 一致）：
+
+| Skill | 版本 |
+|---|---|
+| memory-hygiene | 1.0.0 |
+| publish-privacy-alert | 1.0.0 |
+
 **Claude Code 用户**：`./install.sh --claude` 装的是 skill 文本层（软规则），hook 变体未做 CC 适配。想上闸门可以 `askfirst-gate.dsh.js` 为基底自行适配——它是 claude 协议形状（snake_case payload、小写工具名），适配点：CC 的 settings.json hooks 注册格式、CC 的 advisory 走 PreToolUse 的 additionalContext（无需 DSH 的 PostToolUse 绕道）、CC 的 Stop 拦截语义。适配后建议跑一遍 test-gate.dsh.js 的用例形态自证。
 
 zcode-wallet（技能+CLI）已于 2026-10-11 退役，见 [deprecated/](deprecated/)——其 SKILL.md 已改名 `SKILL.md.retired`，不会被 skills.sh 等收录；需要时从 git 历史或 deprecated/ 目录复活。

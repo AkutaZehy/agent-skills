@@ -1,5 +1,6 @@
 ---
 name: publish-privacy-alert
+version: "1.0.0"
 description: 对外发布（push、PR、release、发包、公开站点）前的内容隐私卫生审查：机器画像驱动的确定性扫描 + 四类人工核对 + 最终交付物终扫。触发词：对外发布、推送、公开、发包、发版、release、上架、泄露自查、push 前检查。本 skill 提供核对方法与流程，不构成防泄露完成时——已知盲区与最终责任见正文。
 ---
 
@@ -17,6 +18,14 @@ description: 对外发布（push、PR、release、发包、公开站点）前的
 - 文件 symlink 会被跟随并扫描；未解析的 symlink 记扫描错误（exit 6），不静默跳过；目录 symlink 不展开，发布树内的目录 symlink 指向需人工确认。
 
 每次对外发布的最终判断，始终是**人 + 流程**的责任。
+
+## 与 magpie 出站脱敏的边界
+
+magpie 的 Privacy masking（`redact`）在本机常开。2026-10-27 实测：网关 v0.1.1668、`~/.config/magpie/settings.json` 的 `"redact": true`、`~/.config/magpie/masking/` 有逐请求记录（66 条、329 个值，类别 SECRET / API_KEY / TOKEN）、脱敏服务不可用时返回 503 而不发送。它做的是**值级、可逆、出站**替换：API key、私钥、token、邮箱、带校验和的卡号与证件号换成占位符，回复里再还原。
+
+边界：它覆盖经过该网关的流量，`git push` 不经过；它认凭据与 PII 值，盘符路径、主机名、派生 ID 与第三方版权不在其检测面；它不改文件。发布树级判定由本 skill 的画像扫描与人工核对承担，两者各自独立，不可互相替代。
+
+复核方法：看 `~/.config/magpie/settings.json` 的 `redact` 与 `~/.config/magpie/masking/*.jsonl` 的记录条数与类别。
 
 ## 审查范畴（四类必审）
 

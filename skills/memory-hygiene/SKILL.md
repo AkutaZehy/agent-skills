@@ -1,5 +1,6 @@
 ---
 name: memory-hygiene
+version: "1.0.0"
 description: Use when writing or editing memory files (auto-memory MEMORY.md and per-project memory/*.md), when a session produced decisions worth persisting, or when the user asks to review/curate/prune memories. Enforces positive framing, terminal-state over narrative, and size budgets so memories stay load-bearing instead of becoming session logs. Also governs functional prose (READMEs, plans, reports, docs): pair imperative negatives with a same-sentence positive alternative; human-voice prose (blogs, diaries) stays exempt.
 ---
 
@@ -36,6 +37,28 @@ When a negative constraint is unavoidable (true edge cases, existing-behavior wa
 **Minimal failure traces.** A lesson earns its place by its trigger condition and detection method, not by how badly it went. Keep: the rule, the one-line evidence ("30K 训练作废" suffices), the check that catches it early. Drop: multi-paragraph incident reconstructions, blame/tone words ("被点名批评", "连续三轮", "浪费"), and verbatim bad examples (one masked reference is enough — a quoted bad commit message re-teaches the bad pattern every recall). The user's verbatim words for preferences and standards are the exception: quote them, they are ground truth.
 
 **Gate predictions behind the evidence.** Record uncertainty as uncertainty ("归因收敛到 X 或 Y，未分解"), and retire guesses the moment data lands — a disproven hypothesis left in memory re-fights the battle next session.
+
+## Where a memory goes
+
+Three buckets, chosen by where the fact stays true:
+
+- **Global** (`projects/default-<id>/memory/`): preferences, cross-project norms, environment facts and cross-project references — anything a session in any workspace must be able to recall.
+- **Project** (`projects/<project>-<hash>/memory/`): operational rules and facts that hold only inside that project.
+- **Sandbox** (`draft-*`): auto-memory for one conversation. No other session reads it, so treat it as scratch.
+
+Promotion: copy a sandbox memory into the global bucket only when it is cross-workspace reusable and not one-off. A constraint that held for one conversation (a quota limit, a one-session instruction) stays in the sandbox and is not typed `feedback`.
+
+## The index is a build artifact
+
+`MEMORY.md` is rendered from frontmatter by `tools/memory-index.py`; the generator is the only writer. The index carries the always-read tier (`type: feedback` and `type: user`); every other memory stays out of it and is found by grep over the bucket.
+
+- To change what a line says, edit the file's `title` or `description`, then regenerate.
+- `python tools/memory-index.py --check` exits 0 when the index matches and 1 when it has drifted; run it before reading the index and rebuild on 1.
+- `supersedes: <name>` marks that a newer memory replaces an older one. Both files stay on disk and the index shows the newest; retiring a memory means superseding it, not waiting for a date.
+
+## Archiving changes visibility, not location
+
+A memory leaves the index by being filtered out at generation time; the file stays in `memory/` and remains reachable by grep. A physical move into `memory/archive/YYYY-MM/` is reserved for content confirmed dead (a closed deadline, a superseded decision) — only then does the default grep scope stop seeing it.
 
 ## Size budgets
 

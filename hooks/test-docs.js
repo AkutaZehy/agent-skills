@@ -36,7 +36,7 @@ ok('SKILL Chinese has the minimum complete set', skill.includes('最小完备集
 
 ok('root README names protocol v7', has('README.md', '反问协议 v7') && lacks('README.md', '反问协议 v2'));
 ok('ask-first README names protocol v7', has('skills/ask-first/README.md', '反问协议 v7') && lacks('skills/ask-first/README.md', '反问协议 v2'));
-ok('CHANGELOG top section is v7', /^## v7 \(2026-10-25\)/m.test(read('CHANGELOG.md')));
+ok('CHANGELOG has a protocol v7 section', /^## v7 \(2026-10-25\)/m.test(read('CHANGELOG.md')));
 ok('CHANGELOG has no v8 section', !/^## v8\b/m.test(read('CHANGELOG.md')));
 ok('CHANGELOG records the withdrawn v7 label', has('CHANGELOG.md', '本版原标签为 v8'));
 
@@ -89,6 +89,15 @@ ok('templates index marks zcode-wallet retired', lacks('templates/README.md', 'z
 // ── 其他 skill 的版本/描述同步 ──
 ok('negafix metadata records the local patch', has('skills/negafix/SKILL.md', 'version: "1.2.1+local.1"'));
 ok('negafix changelog records the local patch', has('skills/negafix/CHANGELOG.md', '1.2.1+local.1'));
+
+// ── skill 版本表与 frontmatter 一致（版本叙述不漂移） ──
+const versionRows = { 'memory-hygiene': '1.0.0', 'publish-privacy-alert': '1.0.0' };
+for (const [name, ver] of Object.entries(versionRows)) {
+  const skillFm = (read('skills/' + name + '/SKILL.md').split('---')[1] || '');
+  ok('README version row matches ' + name, readme.includes('| ' + name + ' | ' + ver + ' |'));
+  ok(name + ' frontmatter records version ' + ver,
+    new RegExp('version:\\s*"' + ver.replace(/\./g, '\\.') + '"').test(skillFm));
+}
 ok('memory size budget uses one threshold', lacks('skills/memory-hygiene/SKILL.md', '>15KB') && has('skills/memory-hygiene/SKILL.md', '~8KB soft cap'));
 ok('root README mentions shell section 11', has('README.md', '第 11 节输出落盘与批量纪律'));
 ok('root README mentions test validation criteria', has('README.md', '验证口径'));
