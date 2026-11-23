@@ -87,8 +87,8 @@ ok('templates index lists output-style', has('templates/README.md', 'output-styl
 ok('templates index marks zcode-wallet retired', lacks('templates/README.md', 'zcode-wallet 无需引用块') && has('templates/README.md', 'zcode-wallet 已于'));
 
 // ── 其他 skill 的版本/描述同步 ──
-ok('negafix metadata records the local patch', has('skills/negafix/SKILL.md', 'version: "1.2.1+local.1"'));
-ok('negafix changelog records the local patch', has('skills/negafix/CHANGELOG.md', '1.2.1+local.1'));
+ok('negafix metadata records the local patch', has('skills/negafix/SKILL.md', 'version: "1.2.1+local.2"'));
+ok('negafix changelog records the local patch', has('skills/negafix/CHANGELOG.md', '## [1.2.1+local.2]'));
 
 // ── skill 版本表与 frontmatter 一致（版本叙述不漂移） ──
 const versionRows = { 'memory-hygiene': '1.0.0', 'publish-privacy-alert': '1.0.0' };

@@ -1,9 +1,9 @@
 ---
 name: negafix
-description: You MUST use this when writing or editing prose anywhere in a project (docs, READMEs, marketing copy, commit messages) and when asked to audit, score, or clean up negative parallelism, the "it's not just X, it's Y" construction, or bare imperative negatives in Chinese functional prose.
+description: You MUST use this when writing or editing prose anywhere in a project (docs, READMEs, marketing copy, commit messages) and when asked to audit, score, or clean up negative parallelism, the "it's not just X, it's Y" construction, bare imperative negatives in Chinese functional prose, or Chinese dash density and abstract nominalization.
 metadata:
   author: Ihor Orlovskyi
-  version: "1.2.1+local.1"
+  version: "1.2.1+local.2"
 license: MIT
 ---
 
@@ -116,6 +116,44 @@ A match is a `violation` only when its sentence carries no positive alternative
 (应当/应该/建议/推荐/改为/改用/换成/请用/请按/直接在/统一用/一律/优先/可以用/可通过…).
 "请用生成器重建；不要手动编辑" is paired — no penalty, no row. Rewrite recipe: state the
 positive practice first, keep the negative as the same-sentence exception.
+
+### Local extension: Chinese dash density and abstract nominalization
+
+Second local extension, measured on 2026-11-23 over one month of local assistant
+sessions (152 rollouts, 30 sessions, per-1000-character rates). Two Chinese surface
+habits survived every rule already in this file, and both are countable. Same contract
+as above: a match is a `candidate` until you read the sentence.
+
+**Dash as connector.** Chinese prose uses `——` for an aside. Generated text reaches for
+it when a causal or contrastive link is missing, because two em dashes are shorter than
+writing the conjunction out. In the measured corpus the rate spanned 0.0 to 6.4 per 1000
+characters across nine models, six of them under 2.8. Treat 3 or more per 1000 characters
+in functional prose as a candidate.
+
+```bash
+wc -m README.md
+rg -o --no-filename '——' README.md | wc -l
+```
+
+A match is a `violation` only when the dash stands where a conjunction belongs
+("性能提升了——内存翻倍" against "性能提升了，内存也翻倍"): write the conjunction. An aside
+that interrupts the sentence and then resumes it is ordinary punctuation, no row.
+
+**Abstract nominalization.** `可验证性`, `确定性`, `进行统一收敛` turn an action into a noun,
+which is the Chinese shape of compressing an action relation into a noun pile. A closed
+lexicon beats a character pattern here: scanning `[\u4e00-\u9fff]{3,}(化|性|度)` across
+the same corpus returned 556 matches whose large majority were ordinary words
+(`兼容性`, `初始化`, `一次性`, `精度`, `宽度`). Keep the lexicon and extend it when a miss
+shows up.
+
+```bash
+rg -nP '可验证性|确定性|不确定性|可维护性|可复现性|可解释性|可观测性|结构性|系统性|范式性|成熟度|耦合度|颗粒度|进行[^，。；]{2,6}(处理|优化|评估|梳理|整合)' \
+  --glob '*.{md,txt,rst,adoc}' .
+```
+
+A match is a `violation` only when the verb form is the plain wording and no precision
+is lost ("对该路径做了可复现性验证" against "重新跑一遍，这条路径能复现"). A term of art the
+domain actually needs (`内存耦合度` in a systems doc) stays, no row.
 
 ## Verdicts
 

@@ -3,6 +3,19 @@
 All notable changes to the `negafix` skill. Versions refer to `metadata.version`
 in SKILL.md. This file is for maintainers and is never loaded by agents using the skill.
 
+## [1.2.1+local.2] - 2026-11-23
+
+Local extension; upstream 1.2.1 and local.1 behavior unchanged.
+
+### Added
+- Local extension for Chinese dash density (`——` used where a conjunction belongs) and
+  abstract nominalization (`SKILL.md` §Local extension: Chinese dash density and abstract
+  nominalization). Thresholds come from one month of local sessions: dash rate 3 per 1000
+  characters against an observed 0.0-6.4 range, and nominalization as a closed lexicon
+  because the character pattern
+  `[\u4e00-\u9fff]{3,}(化|性|度)` returned 556 matches of which most were ordinary words.
+- Frontmatter description now includes both new triggers.
+
 ## [1.2.1+local.1] - 2026-10-25
 
 Local extension; upstream 1.2.1 behavior unchanged.

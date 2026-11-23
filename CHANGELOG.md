@@ -4,6 +4,20 @@
 
 版本轴说明：v2 / v5 / v6 / v7 是协议（行为）版本；v3 / v4 / v4B / v4C 是 hook 门禁特性批次。两者曾共用 `vN` 标号，历史节按内容判断。
 
+## 2026-11-23 · negafix 1.2.1+local.2：中文破折号密度与抽象名词化
+
+1. **negafix 1.2.1+local.2**（上游 1.2.1 与 local.1 行为不变）——新增第二个中文检测段，两类可机械计数的 AI 腔：破折号当连接词用（≥3 次/千字符为候选）与抽象名词化（闭集词表：可验证性/确定性/结构性/颗粒度…）。
+2. **阈值来自实测** —— 近一月 152 个 rollout、30 个会话，破折号每千字符频率跨 0.0-6.4、九个模型里六个在 2.8 以下，阈值取 3。
+3. **为什么用闭集而非字符正则** —— `[\u4e00-\u9fff]{3,}(化|性|度)` 在同一语料命中 556 次，绝大多数是普通词（兼容性/初始化/一次性/精度/宽度），正则精度不足以进入候选集。
+4. **`doc-lint.py` 新增 R8**（本机工具，不入仓库）——正文段落字数 CV < 0.5 且 ≥6 段、≥1500 字符时报告段落节奏扁平化；本地 11 份文档实测 CV 0.50-1.31，阈值零误报。
+
+## 2026-10-30 · 浏览器路线引导 hook
+
+1. **新增 `hooks/browser-route.js`**（ZCode 单变体）——UserPromptSubmit 时检测浏览器意图，命中则在消息尾部注入路线规则：浏览器任务默认走 browser-use（`mcp__node_repl__js` + ZCode 内嵌浏览器 IAB），playwright MCP 留给它的专属场景（console 报错捕获 / network 请求体检查 / route mock / cookie 与 storage 读写 / 文件上传 / PDF 导出 / emulate_media / run_code_unsafe），判据是"这次要不要 console / network / mock / cookie / 上传 / PDF"。用户点名 playwright 时不注入，非浏览器任务不注入，同会话至多注入一次，畸形输入静默放行。
+2. **落点选择依据** —— 放在 UserPromptSubmit 尾部而非 AGENTS.md：实测尾部注入的采纳率高于首位注入（AGENTS.md 注入在 messages 首个 user 消息，离当前轮可达 250K tokens，同会话内首位的委派规则 0 次被采纳；尾部注入的 TodoWrite 提醒基本次次被采纳）。
+3. **`hooks/test-browser-route.js`（21 例）** —— 覆盖命中/不命中关键词、显式点名 playwright 时的尊重、会话去重、ambient 排除、system-reminder 信封剥除、畸形与空输入的放行。
+4. **skill 版本无变更**；`memory-hygiene` 与 `publish-privacy-alert` 保持 1.0.0。
+
 ## 2026-10-27 · 记忆分层、索引生成与同步 SOP
 
 1. **memory-hygiene 1.0.0**（版本自本日起算）——新增"记忆落点三分"（全局 / 项目 / 沙箱）、提升判据（跨工作区可复用且非一次性）、索引生成契约（`MEMORY.md` 是产物，只收 `type: feedback` 与 `type: user`）、归档语义（退出索引不等于移动文件；`supersedes:` 取代时间规则）。
