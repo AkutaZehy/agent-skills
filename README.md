@@ -17,6 +17,7 @@
 | [negafix](skills/negafix/) | 负向平行结构禁令与审计（"it's not just X, it's Y"）+ 中文功能文祈使负向（"不要xxx"须同句配正向）+ 中文破折号密度与抽象名词化，上游 v1.2.1 + 本地中文检测段（1.2.1+local.2） | 通用 | [SKILL](skills/negafix/SKILL.md) |
 | [shell-hygiene](skills/shell-hygiene/) | Windows/Git Bash 命令纪律：MSYS 路径转换与三形态路径、引号与 heredoc 转义、Python/PowerShell 编码、预期退出码与白名单收口、破坏性操作前的回滚，第 10 节 oneshot 六项预检、第 11 节输出落盘与批量纪律 | 通用（实测值来自本机 Windows/Git Bash） | [README](skills/shell-hygiene/README.md) |
 | [deliverable-medium](skills/deliverable-medium/) | 交付介质判据：六条 HTML 判据、排除项与版式词典指针，命中出单文件 HTML，否则留对话或 markdown | 通用 | [SKILL](skills/deliverable-medium/SKILL.md) |
+| [ctx-batch](skills/ctx-batch/) | 批量读取与检索：一次 CLI 调用扫/读/跑，只回紧凑摘要，全文落 `.ctx/logs` 供分页；单文件或单次 grep 不用它 | 通用（脚本需要 Python 3） | [SKILL](skills/ctx-batch/SKILL.md) |
 
 兼容性口径："通用"=SKILL.md 文本对任何 SKILL.md 类 harness（ZCode/dsh/Claude Code）装上即用；"仅 ZCode"=功能绑定 ZCode 的本地数据（db/rollout）。hook 的兼容性单独一节见下。
 
@@ -36,7 +37,7 @@ SKILLS="ask-first" ./install.sh --zcode  # 只装一个
 
 手动方式等价于对每个 harness 的技能目录 `cp -r skills/<name>`（ZCode=`~/.zcode/skills`、dsh=`~/.dsh/skills`、Claude Code=`~/.claude/skills`）。
 
-默认 `SKILLS` 列表：memory-hygiene、ask-first、strategic-coding、shell-hygiene。其余 skill（research-intake、publish-privacy-alert、test-hygiene、negafix、deliverable-medium）按需单装：`SKILLS="<name>" ./install.sh --zcode`。
+默认 `SKILLS` 列表：memory-hygiene、ask-first、strategic-coding、shell-hygiene。其余 skill（research-intake、publish-privacy-alert、test-hygiene、negafix、deliverable-medium、ctx-batch）按需单装：`SKILLS="<name>" ./install.sh --zcode`。ctx-batch 的脚本随目录一起拷入（`skills/ctx-batch/scripts/ctx.py`）；想按 `~/.zcode/bin/ctx.py` 的写法调用，自行建软链或拷贝到该路径。
 
 negafix 是第三方 skill（上游 Ihor Orlovskyi v1.2.1，MIT）加本地中文检测段的补丁版；上游出新版覆盖安装副本会丢中文段，以本仓库 `skills/negafix/` 为正本重拷。
 
@@ -45,6 +46,8 @@ negafix 是第三方 skill（上游 Ihor Orlovskyi v1.2.1，MIT）加本地中�
 **hooks（可选，ZCode 与 dsh 双变体）**：ask-first 的结构闸门有两个 harness 变体——`hooks/askfirst-gate.js`（ZCode：装到 `~/.zcode/hooks/`，`--hooks` 自动合并进 `~/.zcode/cli/config.json`）与 `hooks/askfirst-gate.dsh.js`（DSH：装到 `~/.dsh/hooks/`，手工注册进 dsh 的 `hooks.json`）。作用：①开工/首次落笔/收尾三时刻注入（开工三件套含【任务确认】块：任务数+hook判vs模型判对照，不一致先质询 / 计划态与描述分类 / 读→改漂移 / 翻转对账 / M1 完成断言证据门；v7 起补 unknown/读/检索/描述轮轻提醒、最小完备集文案、功能文卫生 advisory）；②shell 变更/外发门禁——外发不可逆（git push、npm publish/unpublish、gh repo|release 删发、gh api 写）首拦；路径守卫按可回滚性判定（git tracked 放行、脚本区/临时/记忆放行、非 git 或未追踪的既有文件拦一次核对拼写）；git 状态覆盖首拦；确认点门禁（用户指令含硬停点或 AI 问题文本自书确认承诺时，用户区写硬拦且不因重跑放行）；就地修改提醒。被拦后**逐字重跑同一命令**即放行。状态选址：DSH 变体按 cwd 落 `<cwd>/.dsh-hooks-state`，依次回退系统临时目录与 `${harness}/hooks/state/`；ZCode 变体落 `~/.zcode/hooks/state`（24h 过期清理）。记忆写入在 Stop 侧兜底提醒一次。版本变更史见 [CHANGELOG.md](CHANGELOG.md)。`hooks/test-gate.js`（76 例）、`hooks/test-gate.dsh.js`（84 例）、`hooks/test-sync.js`（56 项；契约面同步守卫——两变体的词表/文案/核心判定函数必须等价，有意分叉须带理由进 allowlist）、`hooks/test-docs.js`（版本叙述/例数/模板契约）。
 
 **hooks（可选，ZCode 单变体）**：浏览器路线引导 `hooks/browser-route.js`（装到 `~/.zcode/hooks/`，注册进 `~/.zcode/cli/config.json` 的 `UserPromptSubmit`）。任务涉及浏览器操作时在消息尾部注入路线规则——默认走 browser-use（`mcp__node_repl__js` + ZCode 内嵌浏览器 IAB），playwright MCP 留给它的专属场景（console 报错捕获 / network 请求体检查 / route mock / cookie 与 storage 读写 / 文件上传 / PDF 导出 / emulate_media / run_code_unsafe），判据是"这次要不要 console / network / mock / cookie / 上传 / PDF"。落点在尾部是因为实测尾部注入的采纳率高于首位注入（AGENTS.md 注入在 messages 首个 user 消息，离当前轮可达 250K tokens）。用户点名 playwright 时不注入，按用户指定执行；非浏览器任务不注入；同会话至多注入一次。`hooks/test-browser-route.js`（21 例）。
+
+**hooks（可选，ZCode 单变体）**：Bash 预检 `hooks/bash-lint.js`（装到 `~/.zcode/hooks/`，注册进 `~/.zcode/cli/config.json` 的 `PreToolUse` 与 `PostToolUse`，两次都传事件名：`node bash-lint.js PreToolUse`）。PreToolUse 做五项检查并在有明确证据时才拦：R1 语法（`bash -n`，以及 `python - <<EOF` heredoc 的 `py_compile`）、R2 破坏性命令（`find -delete` / `xargs rm` / `Remove-Item -Recurse` / `git clean -fd` / `git reset --hard`；首次拦、逐字重跑放行）、R3 失败重试（同一命令 10 分钟内失败过则拦，要求改一个变量）、R4 目标存在（`mkdir` 父目录、`cp`/`mv`/`install` 的源与目标父目录、重定向目标不是目录且父目录存在）、R5 工具可用（`command -v` 结果缓存 1 小时）；PostToolUse 记录失败命令的 hash 供 R3 使用（`exit_code` 缺失时以 interrupted 或 stderr 强标记判定，grep/rg/`test`/`git diff --exit-code` 等预期非零走白名单）。内部异常一律放行，不阻塞会话。Windows 上自动探测 `C:/Program Files/Git/bin/bash.exe` 与 `C:/Program Files/Python312/python.exe`，探测不到退回 PATH 上的 `bash` / `python`。与 ask-first 的闸门分工：路径碰撞类（rm/cp/mv/git 状态覆盖）由 askfirst-gate 负责，本 hook 不重复拦。**尚无配套 `hooks/test-*.js`**，用例待补。
 
 **版本口径**：ask-first 协议当前为 v7；hook 的 v4/v4B/v4C 等是 gate 特性批次，不是协议版本。变更史见 [CHANGELOG.md](CHANGELOG.md)。
 

@@ -4,6 +4,13 @@
 
 版本轴说明：v2 / v5 / v6 / v7 是协议（行为）版本；v3 / v4 / v4B / v4C 是 hook 门禁特性批次。两者曾共用 `vN` 标号，历史节按内容判断。
 
+## 2026-11-25 · 新增 ctx-batch 与 bash-lint：批量上下文与 Bash 预检
+
+1. **`skills/ctx-batch/`（新增）**——一次 CLI 调用完成批量扫描/读取/执行，只回紧凑摘要，全文落 `.ctx/logs` 供分页；`scan`/`read`/`run`/`page` 四个子命令，`run` 以 argv 列表执行（`shell=False`）。脚本随 skill 发布在 `scripts/ctx.py`，正文里给的是 ZCode 本机装法 `~/.zcode/bin/ctx.py`。
+2. **`hooks/bash-lint.js`（新增，ZCode 单变体）**——Bash 预检与失败重试守卫五项：R1 语法（`bash -n` 与 Python heredoc 的 `py_compile`）、R2 破坏性命令（首次拦、逐字重跑放行）、R3 同命令 10 分钟内失败过则拦、R4 `mkdir`/`cp`/`mv`/`install`/重定向的目标父目录、R5 `command -v` 工具可用（1 小时缓存）。内部异常一律放行；与 askfirst-gate 的分工是路径碰撞类不重复拦。
+3. **未配套测试**——`hooks/bash-lint.js` 暂无 `hooks/test-*.js` 用例；`ctx-batch` 的脚本只做过 `--help` 冒烟。两者都不被 `hooks/test-docs.js` 断言，故不影响现有检查。
+4. **skill 版本无变更**；`memory-hygiene` 与 `publish-privacy-alert` 保持 1.0.0。
+
 ## 2026-11-23 · negafix 1.2.1+local.2：中文破折号密度与抽象名词化
 
 1. **negafix 1.2.1+local.2**（上游 1.2.1 与 local.1 行为不变）——新增第二个中文检测段，两类可机械计数的 AI 腔：破折号当连接词用（≥3 次/千字符为候选）与抽象名词化（闭集词表：可验证性/确定性/结构性/颗粒度…）。
