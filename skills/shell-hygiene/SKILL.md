@@ -14,7 +14,7 @@ description: Run shell commands on this Windows box without the usual Git Bash t
 | Git Bash | GNU bash 5.3.15(1)-release (x86_64-pc-cygwin)，`uname -a` 显示 MINGW64_NT-10.0-26300 | bash 内建与 MSYS 程序用 POSIX 路径 |
 | grep | shell function 包 ugrep 7.8.4 WIN64（`-G --ignore-files --hidden -I --exclude-dir=.git …`） | 默认跳过 .gitignore 里的文件与二进制；参数属于 `--filter/--pager/-Z/--null` 一类时回落 `command grep` |
 | Python | 3.12.9 | 环境里已有 `PYTHONIOENCODING=utf-8` 与 `PYTHONUTF8=1`，stdout 默认 utf-8；这两个变量缺席时回落 `gbk`（utf8_mode=0） |
-| PowerShell | 5.1.26100.9711（`powershell`）、7.6.7（`pwsh`） | 两者都在 PATH 上，写文件的默认编码不同（第 5 节） |
+| PowerShell | `powershell` = Windows PowerShell 5.1（系统自带，仅为兼容保留）、`pwsh` = PowerShell 7.x（**优先使用**；版本随更新漂移，本表只记行为差异） | 两者都在 PATH 上，写文件的默认编码不同（第 5 节）；稳定性与编码默认值 pwsh7 更好 |
 | Node | v26.7.0 | stdout 默认 UTF-8 |
 | gh | 已登录 GitHub CLI（keyring，ssh 协议；账号与 scopes 用 `gh auth status` 查） | `gh api`、`gh repo view` 可直接跑，无需再登录 |
 | 控制台代码页 | cmd 活动代码页 936（GBK） | `chcp` 不在 Git Bash 里（command not found），只能用 `cmd //c chcp 65001` |
@@ -74,8 +74,10 @@ PY
 
 ## 7. PowerShell / cmd 调用姿势
 
-- 脚本文件：`pwsh -NoProfile -File script.ps1`。有 pwsh 就优先用它：默认写 utf8NoBOM，`$OutputEncoding` 是 utf-8。
-- 单行命令：`powershell -NoProfile -Command 'Write-Output "x"'` —— 外层单引号、内层双引号，实测输出 `x`。
+- 有 pwsh（7.x）就优先用它：稳定性与默认编码都优于 `powershell`（5.1）——默认写 utf8NoBOM，`$OutputEncoding` 是 utf-8；5.1 只在显式需要其行为时使用。
+- 脚本文件：`pwsh -NoProfile -File script.ps1`。
+- 单行命令：`pwsh -NoProfile -Command 'Write-Output "x"'` —— 外层单引号、内层双引号，实测输出 `x`（5.1 同式可用，首选 pwsh）。
+- 启动开销（2026-11-28 实测，Git Bash 内连续单发）：bash ~80ms、pwsh ~380ms、powershell(5.1) ~270ms——文本/文件/git 类操作留在 bash，只有 Windows 原生 API（CIM/注册表/服务）才进 PowerShell。
 - `-NoProfile` 必带：用户 profile 里的别名与函数会改写命令语义。
 - 引号超过三层就落成 `.ps1` 文件再 `-File`，省掉转义层。`pwsh -NoProfile -File -` 读 stdin 会带交互提示行（实测输出里混进 `PS C:\...>` 回显），不适合当管道用。
 - cmd：`cmd //c <command>`。
