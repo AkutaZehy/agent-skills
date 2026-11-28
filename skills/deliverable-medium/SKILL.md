@@ -1,5 +1,6 @@
 ---
 name: deliverable-medium
+version: "1.0.0"
 description: Use when choosing how to hand over a deliverable — chat text, markdown file, or single-file HTML. Owns the six HTML criteria, the exclusion cases, and the layout dictionary pointer. 触发词：交付介质、HTML 判据、单文件 HTML、版式词典。
 ---
 

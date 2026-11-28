@@ -1,5 +1,6 @@
 ---
 name: ctx-batch
+version: "1.0.0"
 description: Use when a task requires reading, searching, or executing across many files, directories, or long logs. Runs one batched CLI call and returns a compact digest while storing full output under .ctx/logs for paging. Triggers include 批量读文件、跨目录搜索、扫日志、多文件 grep、批量命令.
 ---
 

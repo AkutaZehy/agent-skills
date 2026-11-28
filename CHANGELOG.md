@@ -4,6 +4,12 @@
 
 版本轴说明：v2 / v5 / v6 / v7 是协议（行为）版本；v3 / v4 / v4B / v4C 是 hook 门禁特性批次。两者曾共用 `vN` 标号，历史节按内容判断。
 
+## 2026-11-28 · README 一览表重写：四组分段、附注列、全量版本号
+
+1. **Skills 一览表重写**——按"卫生 / 协作与编码纪律 / 调研与发布 / 效率工具"四组分段；功能描述改人读口径（写明 TDD 出处、清除 AI 腔的手段、开工三件套机制这类实质内容），不再是文档腔动词串。
+2. **新增"附注"列**——版本号、出处、机器依赖（画像自备/脚本需 Python 3/实测值来自本机）从功能描述中拆出单列。
+3. **全量版本号**——为 6 个未定版 skill（strategic-coding / research-intake / test-hygiene / shell-hygiene / deliverable-medium / ctx-batch）铸 `version: "1.0.0"` 入 frontmatter；ask-first 保持 `version: "7"`（协议版本口径）；negafix 1.2.1+local.2 不变。docs/install.md 版本表扩到 10 行全量，`hooks/test-docs.js` 版本断言同步扩到 10 个 skill（并修复断言正则对 `+` 号未转义的隐患）。
+
 ## 2026-11-28 · README 瘦身重构：安装拆入 docs/，DSH 变体退役
 
 1. **README 重写**——定位收窄为技能索引：不再枚举 harness（改述"给 SKILL.md 类 harness 用的 skills / hooks / templates 合集"，作者为 ZCode 用户一句带过），安装/hooks 细节全部移出，Skills 一览表逐行具体化（二字动词句式：管理/约束/打磨/守住/校验/量化/整理/判定/加速），删除"兼容性"列与协议口径行里的 harness 枚举。保留 test-docs 断言锚点短语（反问协议 v7、检索路由、验证口径、第 11 节输出落盘与批量纪律）。

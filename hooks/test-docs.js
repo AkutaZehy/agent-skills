@@ -92,12 +92,23 @@ ok('negafix metadata records the local patch', has('skills/negafix/SKILL.md', 'v
 ok('negafix changelog records the local patch', has('skills/negafix/CHANGELOG.md', '## [1.2.1+local.2]'));
 
 // ── skill 版本表与 frontmatter 一致（版本叙述不漂移） ──
-const versionRows = { 'memory-hygiene': '1.0.0', 'publish-privacy-alert': '1.0.0' };
+const versionRows = {
+  'memory-hygiene': '1.0.0',
+  'ask-first': '7',
+  'strategic-coding': '1.0.0',
+  'research-intake': '1.0.0',
+  'publish-privacy-alert': '1.0.0',
+  'test-hygiene': '1.0.0',
+  'negafix': '1.2.1+local.2',
+  'shell-hygiene': '1.0.0',
+  'deliverable-medium': '1.0.0',
+  'ctx-batch': '1.0.0',
+};
 for (const [name, ver] of Object.entries(versionRows)) {
   const skillFm = (read('skills/' + name + '/SKILL.md').split('---')[1] || '');
   ok('install doc version row matches ' + name, install.includes('| ' + name + ' | ' + ver + ' |'));
   ok(name + ' frontmatter records version ' + ver,
-    new RegExp('version:\\s*"' + ver.replace(/\./g, '\\.') + '"').test(skillFm));
+    new RegExp('version:\\s*"' + ver.replace(/\./g, '\\.').replace(/\+/g, '\\+') + '"').test(skillFm));
 }
 ok('memory size budget uses one threshold', lacks('skills/memory-hygiene/SKILL.md', '>15KB') && has('skills/memory-hygiene/SKILL.md', '~8KB soft cap'));
 ok('root README mentions shell section 11', has('README.md', '第 11 节输出落盘与批量纪律'));

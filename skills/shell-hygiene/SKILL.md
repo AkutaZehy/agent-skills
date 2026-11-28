@@ -1,5 +1,6 @@
 ---
 name: shell-hygiene
+version: "1.0.0"
 description: Run shell commands on this Windows box without the usual Git Bash traps - MSYS path conversion, three path forms, quoting for spaces/Chinese/apostrophes, heredoc and -c escaping for Python/Node, UTF-8 IO in PowerShell 5.1 and pwsh 7, expected non-zero exit codes, and rollback for destructive steps. Use when a Bash command fails on Windows, when a path or quote looks wrong, when output shows mojibake or a BOM, or when preparing a one-shot command that must leave the tree intact. 触发词：Windows 命令、Git Bash、bash 报错、路径格式、引号、编码、BOM、乱码、退出码、oneshot、预检。
 ---
 

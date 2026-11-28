@@ -42,7 +42,15 @@ negafix 是第三方 skill（上游 Ihor Orlovskyi v1.2.1，MIT）加本地中�
 | Skill | 版本 |
 |---|---|
 | memory-hygiene | 1.0.0 |
+| ask-first | 7 |
+| strategic-coding | 1.0.0 |
+| research-intake | 1.0.0 |
 | publish-privacy-alert | 1.0.0 |
+| test-hygiene | 1.0.0 |
+| negafix | 1.2.1+local.2 |
+| shell-hygiene | 1.0.0 |
+| deliverable-medium | 1.0.0 |
+| ctx-batch | 1.0.0 |
 
 **变更史**：按组件梳理的变更索引见 [docs/history.md](history.md)；按时间线的完整记录见 [CHANGELOG.md](../CHANGELOG.md)。
 

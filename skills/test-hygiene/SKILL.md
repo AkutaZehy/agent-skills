@@ -1,5 +1,6 @@
 ---
 name: test-hygiene
+version: "1.0.0"
 description: Use when writing, editing, or reviewing tests, evaluating AI-generated test quality, or setting up test suites. Also covers tautological/weak assertion cleanup and mutation testing. 触发词：写测试、改测试、测试审查、测试质量、同义反复断言、突变检验。
 ---
 

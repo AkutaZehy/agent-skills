@@ -1,5 +1,6 @@
 ---
 name: strategic-coding
+version: "1.0.0"
 description: Strategic programming discipline for AI-assisted development - invest design effort in the contract face (names, public interfaces, why-comments), keep implementations rough, pay back debt on signals. Use when starting a project or top-level module, designing or naming an interface, writing comments, deciding where a module boundary goes, merging shallow modules, or refactoring with an agent. 触发词：战略编码、契约面、深模块、尽早注释、清晰命名、浅模块合并、重构纪律。
 ---
 

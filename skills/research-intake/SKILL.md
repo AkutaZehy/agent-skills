@@ -1,5 +1,6 @@
 ---
 name: research-intake
+version: "1.0.0"
 description: Use for multi-source research, papers, long documents, repository surveys, or when retrieved material needs careful extraction before analysis. Prefer primary, high-fidelity sources and give the model only relevant evidence.
 ---
 
