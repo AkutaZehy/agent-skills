@@ -4,6 +4,14 @@
 
 版本轴说明：v2 / v5 / v6 / v7 是协议（行为）版本；v3 / v4 / v4B / v4C 是 hook 门禁特性批次。两者曾共用 `vN` 标号，历史节按内容判断。
 
+## 2026-11-28 · README 瘦身重构：安装拆入 docs/，DSH 变体退役
+
+1. **README 重写**——定位收窄为技能索引：不再枚举 harness（改述"给 SKILL.md 类 harness 用的 skills / hooks / templates 合集"，作者为 ZCode 用户一句带过），安装/hooks 细节全部移出，Skills 一览表逐行具体化（二字动词句式：管理/约束/打磨/守住/校验/量化/整理/判定/加速），删除"兼容性"列与协议口径行里的 harness 枚举。保留 test-docs 断言锚点短语（反问协议 v7、检索路由、验证口径、第 11 节输出落盘与批量纪律）。
+2. **`docs/install.md`（新增）**——承接安装、hooks 注册（askfirst-gate / browser-route / bash-lint）、版本口径、Skill 版本表、zcode-wallet 退役记录；Claude Code 适配段留占位（作者自写长文后替换；旧版以 DSH 变体为基底的指引一并退役）。
+3. **`docs/history.md`（新增）**——按组件归组的变更索引（skills / hooks / templates / docs 四组），时间线完整记录仍见 CHANGELOG。
+4. **DSH 变体退役**——`hooks/askfirst-gate.dsh.js` 移入 `deprecated/`（纯移动，内容零改动）；`install.sh` 删除 `--dsh` 分支与 usage 行；`test-gate.dsh.js` 默认被测路径改指 deprecated 副本；`test-sync.js` 守卫指向退役副本（防误改漂移），文件头注记退役事实；`test-docs.js` 的 DSH 头断言与例数/状态路径/版本表断言重定向（README → docs/install.md，DSH 文件 → deprecated/）。skills 正文与 templates 的 dsh 兼容性提及按裁决保留。
+5. **CHANGELOG 保持时间线口径**；按组件的变更索引见 docs/history.md。
+
 ## 2026-11-28 · AGENTS.md 完整实例入库：templates/agents-md-full.md（结构正本）
 
 1. **`templates/agents-md-full.md`（新增）**——作者用户级 AGENTS.md 的发布版实例，逐节脱敏后入库：删 provider 内部型号名（"smart-split 实测落 Terra"）、机器实时状态（"agents-state 覆盖当前为空"）与个人模型配置（"DeepSeek 只用 max"，改留 `[机器私有]` 槽位示例）；`memory-index.py` 与 `browser-client.mjs` 等本机私有文件引用改为自备/指针表述；发布仓绝对盘符路径改"本仓库（agent-skills）"占位；画像路径注明自备不入库。头部两行说明实例定位与 hooks 批次对应关系。

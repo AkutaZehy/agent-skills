@@ -1,11 +1,12 @@
 // 契约面同步守卫：ZCode 版与 DSH 版 askfirst-gate 必须共享的语义面在此断言相等；
 // 有意分叉的面进 ALLOWLIST（必须带理由注释，只断言存在不断言内容）。
 // 用法: node test-sync.js   —— 退出码 1 = 契约面漂移，需裁决（回流改齐 或 移入 ALLOWLIST 写理由）。
+// DSH 变体已于 2026-11-28 退役至 deprecated/，守卫保留，防止退役副本被误改后与 ZCode 版漂移。
 const fs = require('fs');
 const path = require('path');
 
 const A = fs.readFileSync(path.join(__dirname, 'askfirst-gate.js'), 'utf8');      // ZCode
-const B = fs.readFileSync(path.join(__dirname, 'askfirst-gate.dsh.js'), 'utf8');  // DSH
+const B = fs.readFileSync(path.join(__dirname, '..', 'deprecated', 'askfirst-gate.dsh.js'), 'utf8');  // DSH（已退役，见文件头注记）
 
 // ── 契约面：两侧必须逐字等价（空白归一后） ──
 const MUST_EQUAL = [

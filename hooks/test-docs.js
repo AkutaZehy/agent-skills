@@ -42,10 +42,10 @@ ok('CHANGELOG records the withdrawn v7 label', has('CHANGELOG.md', '本版原标
 
 // ── hook 头与测试台头 ──
 const zHookHead = read('hooks/askfirst-gate.js').split(/\r?\n/)[0];
-const dHookHead = read('hooks/askfirst-gate.dsh.js').split(/\r?\n/)[0];
+const dHookHead = read('deprecated/askfirst-gate.dsh.js').split(/\r?\n/)[0];
 ok('ZCode hook header is protocol v7', zHookHead.includes('协议 v7') && !zHookHead.includes('v2 配套'));
 ok('DSH hook header is protocol v7', dHookHead.includes('协议 v7'));
-ok('DSH hook usage names its own file', read('hooks/askfirst-gate.dsh.js').split(/\r?\n/)[1].includes('askfirst-gate.dsh.js'));
+ok('DSH hook usage names its own file', read('deprecated/askfirst-gate.dsh.js').split(/\r?\n/)[1].includes('askfirst-gate.dsh.js'));
 const dTestHead = read('hooks/test-gate.dsh.js').split(/\r?\n/)[0];
 ok('DSH test usage names its own file', dTestHead.includes('test-gate.dsh.js') && !dTestHead.includes('node test-gate.js'));
 
@@ -73,12 +73,13 @@ const mustCount = mustBlock ? (mustBlock[1].match(/'[^']+'/g) || []).length : -1
 const allowCount = allowBlock ? (allowBlock[1].match(/^\s{2}\w+:/gm) || []).length : -1;
 const syncCount = mustCount + allowCount;
 const readme = read('README.md');
-ok('README ZCode test count matches', readme.includes('test-gate.js`（' + zCount + ' 例）'), 'actual ' + zCount);
-ok('README DSH test count matches', readme.includes('test-gate.dsh.js`（' + dCount + ' 例）'), 'actual ' + dCount);
-ok('README sync count matches', readme.includes('test-sync.js`（' + syncCount + ' 项'), 'actual ' + syncCount);
+const install = read('docs/install.md');
+ok('install doc ZCode test count matches', install.includes('test-gate.js`（' + zCount + ' 例）'), 'actual ' + zCount);
+ok('install doc DSH test count matches', install.includes('test-gate.dsh.js`（' + dCount + ' 例）'), 'actual ' + dCount);
+ok('install doc sync count matches', install.includes('test-sync.js`（' + syncCount + ' 项'), 'actual ' + syncCount);
 
 // ── 关键行为描述与实现一致 ──
-ok('README separates DSH and ZCode state paths', has('README.md', '.dsh-hooks-state') && has('README.md', '~/.zcode/hooks/state'));
+ok('install doc separates DSH and ZCode state paths', has('docs/install.md', '.dsh-hooks-state') && has('docs/install.md', '~/.zcode/hooks/state'));
 ok('publish SKILL says file symlinks are followed', has('skills/publish-privacy-alert/SKILL.md', '文件 symlink 会被跟随'));
 ok('publish SKILL drops the old no-follow claim', lacks('skills/publish-privacy-alert/SKILL.md', 'symlink 不跟随'));
 ok('scan.sh comment says file symlinks are followed', has('skills/publish-privacy-alert/scripts/scan.sh', 'file symlinks are followed'));
@@ -94,7 +95,7 @@ ok('negafix changelog records the local patch', has('skills/negafix/CHANGELOG.md
 const versionRows = { 'memory-hygiene': '1.0.0', 'publish-privacy-alert': '1.0.0' };
 for (const [name, ver] of Object.entries(versionRows)) {
   const skillFm = (read('skills/' + name + '/SKILL.md').split('---')[1] || '');
-  ok('README version row matches ' + name, readme.includes('| ' + name + ' | ' + ver + ' |'));
+  ok('install doc version row matches ' + name, install.includes('| ' + name + ' | ' + ver + ' |'));
   ok(name + ' frontmatter records version ' + ver,
     new RegExp('version:\\s*"' + ver.replace(/\./g, '\\.') + '"').test(skillFm));
 }

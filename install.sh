@@ -5,7 +5,7 @@
 # ~/.zcode/hooks/ and merges it into ZCode config.json (automatic backup, idempotent).
 #
 # Usage:
-#   ./install.sh --zcode [--claude] [--dsh] [--hooks]
+#   ./install.sh --zcode [--claude] [--hooks]
 #   SKILLS="ask-first memory-hygiene" ./install.sh --zcode    # subset
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -15,14 +15,13 @@ HOOKS=0
 targets=()
 
 if [ $# -eq 0 ]; then
-  echo "usage: ./install.sh [--zcode] [--claude] [--dsh] [--hooks]   (SKILLS=\"a b\" to subset)"
+  echo "usage: ./install.sh [--zcode] [--claude] [--hooks]   (SKILLS=\"a b\" to subset)"
   exit 1
 fi
 for arg in "$@"; do
   case "$arg" in
     --zcode)  targets+=("$HOME/.zcode/skills") ;;
     --claude) targets+=("$HOME/.claude/skills") ;;
-    --dsh)    targets+=("$HOME/.dsh/skills") ;;
     --hooks)  HOOKS=1 ;;
     *) echo "unknown flag: $arg" >&2; exit 1 ;;
   esac

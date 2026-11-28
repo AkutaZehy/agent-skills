@@ -10,7 +10,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { spawnSync } = require('child_process');
 
-const HOOK = process.argv[2] || path.join(__dirname, 'askfirst-gate.dsh.js');
+const HOOK = process.argv[2] || path.join(__dirname, '..', 'deprecated', 'askfirst-gate.dsh.js');
 const HOME = process.env.USERPROFILE || process.env.HOME;
 const TS = Date.now();
 const SID = `gatetest-${TS}`;
