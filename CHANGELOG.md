@@ -4,6 +4,12 @@
 
 版本轴说明：v2 / v5 / v6 / v7 是协议（行为）版本；v3 / v4 / v4B / v4C 是 hook 门禁特性批次。两者曾共用 `vN` 标号，历史节按内容判断。
 
+## 2026-11-28 · AGENTS.md 完整实例入库：templates/agents-md-full.md（结构正本）
+
+1. **`templates/agents-md-full.md`（新增）**——作者用户级 AGENTS.md 的发布版实例，逐节脱敏后入库：删 provider 内部型号名（"smart-split 实测落 Terra"）、机器实时状态（"agents-state 覆盖当前为空"）与个人模型配置（"DeepSeek 只用 max"，改留 `[机器私有]` 槽位示例）；`memory-index.py` 与 `browser-client.mjs` 等本机私有文件引用改为自备/指针表述；发布仓绝对盘符路径改"本仓库（agent-skills）"占位；画像路径注明自备不入库。头部两行说明实例定位与 hooks 批次对应关系。
+2. **定位**：该模板为 AGENTS.md 的结构正本——部署实例（`~/.zcode/AGENTS.md`）允许携带机器私有增补，不同步回模板；部署侧同步触发条目已加对应关系句。README templates 节同步登记。
+3. **复核**：publish-privacy-alert scan.sh 终扫模板文件（画像 `~/.config/agent/publish-profile.md`）；test-docs / test-sync 全绿后提交。
+
 ## 2026-11-28 · shell-hygiene PowerShell 项去版本号化与 pwsh7 优先；AGENTS.md 正本对齐
 
 1. **`skills/shell-hygiene/SKILL.md` §1/§7**——环境事实表 PowerShell 行不再绑定具体版本号（本机 pwsh 已随更新到 7.7.0，旧表写死 7.6.7 已过期），表述改为 "`powershell` = Windows PowerShell 5.1（兼容保留）、`pwsh` = PowerShell 7.x（优先使用）"，版本随更新漂移、表内只记行为差异。§7 单行命令处方从 `powershell -NoProfile -Command` 改为 `pwsh -NoProfile -Command`（用户裁定 pwsh7 稳定性更好），并新增实测启动开销行（bash ~80ms / pwsh ~380ms / 5.1 ~270ms，Git Bash 内连续单发）——文本/文件/git 类操作留在 bash，Windows 原生 API 才进 PowerShell。`skills/shell-hygiene/README.md` 实测值句同步去版本号。本机 218 个 rollout 全量复核：cmd.exe 零调用、powershell 真实调用 8-10 次且姿势全部符合本 skill，bash-native 占比 85-93%——现有纪律已把行为塑形到位，未新增硬性 shell 规则。

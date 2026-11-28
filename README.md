@@ -41,7 +41,7 @@ SKILLS="ask-first" ./install.sh --zcode  # 只装一个
 
 negafix 是第三方 skill（上游 Ihor Orlovskyi v1.2.1，MIT）加本地中文检测段的补丁版；上游出新版覆盖安装副本会丢中文段，以本仓库 `skills/negafix/` 为正本重拷。
 
-**templates**：安装结束会打印所选 skill 的 AGENTS.md 引用块；另有 [templates/output-style.md](templates/output-style.md)——输出风格三行的正本，跨 harness 通用，贴进各 harness 的输出风格节或等价位置。
+**templates**：安装结束会打印所选 skill 的 AGENTS.md 引用块；另有 [templates/output-style.md](templates/output-style.md)——输出风格三行的正本，跨 harness 通用，贴进各 harness 的输出风格节或等价位置；[templates/agents-md-full.md](templates/agents-md-full.md)——作者的用户级 AGENTS.md 完整实例（结构正本），按需裁剪，`[机器私有]` 标注行是部署侧增补示例、不同步回模板。
 
 **hooks（可选，ZCode 与 dsh 双变体）**：ask-first 的结构闸门有两个 harness 变体——`hooks/askfirst-gate.js`（ZCode：装到 `~/.zcode/hooks/`，`--hooks` 自动合并进 `~/.zcode/cli/config.json`）与 `hooks/askfirst-gate.dsh.js`（DSH：装到 `~/.dsh/hooks/`，手工注册进 dsh 的 `hooks.json`）。作用：①开工/首次落笔/收尾三时刻注入（开工三件套含【任务确认】块：任务数+hook判vs模型判对照，不一致先质询 / 计划态与描述分类 / 读→改漂移 / 翻转对账 / M1 完成断言证据门；v7 起补 unknown/读/检索/描述轮轻提醒、最小完备集文案、功能文卫生 advisory）；②shell 变更/外发门禁——外发不可逆（git push、npm publish/unpublish、gh repo|release 删发、gh api 写）首拦；路径守卫按可回滚性判定（git tracked 放行、脚本区/临时/记忆放行、非 git 或未追踪的既有文件拦一次核对拼写）；git 状态覆盖首拦；确认点门禁（用户指令含硬停点或 AI 问题文本自书确认承诺时，用户区写硬拦且不因重跑放行）；就地修改提醒。被拦后**逐字重跑同一命令**即放行。状态选址：DSH 变体按 cwd 落 `<cwd>/.dsh-hooks-state`，依次回退系统临时目录与 `${harness}/hooks/state/`；ZCode 变体落 `~/.zcode/hooks/state`（24h 过期清理）。记忆写入在 Stop 侧兜底提醒一次。版本变更史见 [CHANGELOG.md](CHANGELOG.md)。`hooks/test-gate.js`（76 例）、`hooks/test-gate.dsh.js`（84 例）、`hooks/test-sync.js`（56 项；契约面同步守卫——两变体的词表/文案/核心判定函数必须等价，有意分叉须带理由进 allowlist）、`hooks/test-docs.js`（版本叙述/例数/模板契约）。
 
